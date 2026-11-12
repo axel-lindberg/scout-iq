@@ -66,7 +66,7 @@ def main() -> None:
 
     # 4. Feature importance: permutation importance on the test season with a model that never saw it.
     print("3/4 Feature importance")
-    pre_test = df[df.season != TEST_S]
+    pre_test = df[df.season < TEST_S]  # only seasons before the test season
     model_pre = fit(pre_test, feats, params, n_est)
     rel = test[relevant_mask(test)].sample(n=min(15000, int(relevant_mask(test).sum())), random_state=0)
     perm = permutation_importance(model_pre, rel[feats], rel[TARGET], scoring="neg_mean_absolute_error",
