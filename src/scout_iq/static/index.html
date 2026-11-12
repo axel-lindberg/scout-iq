@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>scout-iq</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet">
+<style>
+:root{
+  /* Layout: header + model card strip; predictions table left, chat right */
+  --bg:#f2f4f1; --surface:#ffffff; --ink:#15181d; --muted:#5f6772; --line:#dde2dc;
+  --accent:#00785a; --accent-soft:#e2f2ec; --warn:#b26a00; --warn-soft:#fbf0de; --bad:#b3261e; --bad-soft:#fbe7e5;
+  --display:"Barlow Condensed", "Arial Narrow", sans-serif;
+  --body:"IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --mono:"IBM Plex Mono", ui-monospace, monospace;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){
+  :root{ --bg:#101418; --surface:#181e24; --ink:#e7ebef; --muted:#97a2ad; --line:#2a333c;
+    --accent:#3fc59a; --accent-soft:#16302a; --warn:#e3a54a; --warn-soft:#33281a; --bad:#ef7d75; --bad-soft:#3a1f1e; color-scheme:dark; }
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{background:var(--bg);color:var(--ink);font:15px/1.5 var(--body)}
+button,input,select{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+header{display:flex;align-items:baseline;gap:18px;flex-wrap:wrap;padding:14px 22px;background:var(--surface);border-bottom:1px solid var(--line)}
+.brand{font:700 26px/1 var(--display);letter-spacing:.02em;text-transform:uppercase}
+.brand span{color:var(--accent)}
+.gw{font:600 18px var(--display);text-transform:uppercase;letter-spacing:.04em}
+.fresh{color:var(--muted);font-size:13px}
+main{max-width:1400px;margin:0 auto;padding:18px 22px;display:grid;grid-template-columns:minmax(0,1.5fr) minmax(320px,1fr);gap:18px;align-items:start}
+@media (max-width:950px){main{grid-template-columns:1fr}}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:16px}
+.strip{grid-column:1/-1;display:flex;gap:28px;flex-wrap:wrap;align-items:center}
+.stat b{display:block;font:700 26px/1.1 var(--display);font-variant-numeric:tabular-nums}
+.stat span{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+.stat small{color:var(--muted);font-size:12px}
+.strip p{margin:0;color:var(--muted);font-size:13px;max-width:52ch}
+h2{font:700 20px var(--display);text-transform:uppercase;letter-spacing:.03em;margin:0 0 10px}
+.filters{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;align-items:center}
+.filters select,.filters input{border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:6px 9px}
+.filters input[type=number]{width:96px}
+.filters input[type=text]{width:130px}
+.btn{border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:6px 12px;cursor:pointer;font-weight:500}
+.btn:hover{border-color:var(--accent)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn:disabled{opacity:.5;cursor:default}
+.tablewrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th{text-align:left;font-weight:600;color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.04em;padding:6px 8px;border-bottom:1px solid var(--line)}
+td{padding:7px 8px;border-bottom:1px solid var(--line);vertical-align:middle}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+.xp{font:500 15px var(--mono)}
+.bar{display:inline-block;height:6px;border-radius:3px;background:var(--accent);vertical-align:middle;margin-left:8px}
+.pos{font-size:11px;font-weight:600;padding:1px 6px;border-radius:4px;background:var(--bg);border:1px solid var(--line)}
+.flag{font-size:12px;padding:1px 7px;border-radius:999px}
+.flag.d{background:var(--warn-soft);color:var(--warn)} .flag.i{background:var(--bad-soft);color:var(--bad)}
+.muted{color:var(--muted)}
+.compare{margin-bottom:14px;display:none}
+.compare.on{display:block}
+.cmpgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px}
+.cmp{border:1px solid var(--line);border-radius:10px;padding:10px;font-size:13px}
+.cmp h3{margin:0 0 4px;font:700 18px var(--display);text-transform:uppercase}
+.cmp dl{display:grid;grid-template-columns:auto auto;gap:2px 10px;margin:6px 0 0}
+.cmp dt{color:var(--muted)} .cmp dd{margin:0;text-align:right;font-variant-numeric:tabular-nums}
+.chat{display:flex;flex-direction:column;height:calc(100vh - 210px);min-height:460px;position:sticky;top:12px}
+.log{flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:10px;padding:4px 2px 10px}
+.msg{padding:9px 12px;border-radius:10px;max-width:92%;white-space:pre-wrap;font-size:14px}
+.msg.user{align-self:flex-end;background:var(--accent);color:#fff}
+.msg.bot{align-self:flex-start;background:var(--bg);border:1px solid var(--line)}
+.tools{font:500 11px var(--mono);color:var(--muted);margin-top:6px}
+.suggest{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px}
+.suggest button{font-size:12px;padding:4px 9px;border-radius:999px}
+form.ask{display:flex;gap:8px}
+form.ask input{flex:1;border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:9px 11px}
+.notice{background:var(--warn-soft);border-radius:8px;padding:10px 12px;font-size:14px}
+.err{color:var(--bad);font-size:13px}
+@media (prefers-reduced-motion: reduce){*{scroll-behavior:auto}}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">scout<span>-iq</span></div>
+  <div class="gw" id="gw">Loading…</div>
+  <div class="fresh" id="fresh"></div>
+</header>
+
+<main>
+  <section class="card strip" id="strip" aria-label="Model evaluation">
+    <span class="muted">Loading model evaluation…</span>
+  </section>
+
+  <section class="card" aria-labelledby="pred-h">
+    <h2 id="pred-h">Expected points</h2>
+    <div class="filters">
+      <label class="muted" for="f-pos">Position</label>
+      <select id="f-pos"><option value="">All</option><option>GK</option><option>DEF</option><option>MID</option><option>FWD</option></select>
+      <label class="muted" for="f-price">Max £m</label>
+      <input id="f-price" type="number" min="3.5" max="16" step="0.5" placeholder="any">
+      <label class="muted" for="f-team">Team</label>
+      <input id="f-team" type="text" placeholder="e.g. ARS">
+      <button class="btn" id="b-compare" disabled>Compare selected</button>
+    </div>
+    <div class="card compare" id="compare"></div>
+    <div class="tablewrap"><table>
+      <thead><tr><th></th><th>Player</th><th>Pos</th><th>Fixture</th><th class="num">£m</th><th class="num">xPts</th><th>Availability</th></tr></thead>
+      <tbody id="rows"><tr><td colspan="7" class="muted">Loading predictions…</td></tr></tbody>
+    </table></div>
+    <p class="muted" style="font-size:12px;margin:10px 0 0">xPts = model expected points for the gameweek × chance of playing. Typical error is about 1.9 points per player per match, so treat small differences as ties.</p>
+  </section>
+
+  <section class="card chat" aria-labelledby="chat-h">
+    <h2 id="chat-h">Ask the scout</h2>
+    <div class="suggest" id="suggest">
+      <button class="btn" type="button">Who should I captain?</button>
+      <button class="btn" type="button">Best defenders under £5m?</button>
+      <button class="btn" type="button">Any Arsenal injuries?</button>
+    </div>
+    <div class="log" id="log" aria-live="polite"></div>
+    <form class="ask" id="ask">
+      <label for="q" class="muted" style="position:absolute;left:-9999px">Question</label>
+      <input id="q" autocomplete="off" placeholder="Ask about captains, transfers, injuries…">
+      <button class="btn primary" id="send">Send</button>
+    </form>
+  </section>
+</main>
+
+<script>
+(function(){
+"use strict";
+const $=s=>document.querySelector(s);
+const esc=v=>String(v==null?"":v).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const selected=new Set();
+let sessionId=null, chatOn=false, maxXp=1;
+
+async function api(path,opts){
+  const r=await fetch(path,opts);
+  const body=await r.json().catch(()=>({}));
+  if(!r.ok) throw new Error(body.detail||("Request failed ("+r.status+")"));
+  return body;
+}
+
+function renderStrip(st){
+  const c=st.model_card||{}, mae=c.mae||{}, cap=c.captain_points_per_gw||{};
+  const m=mae["LightGBM"], b=mae["season average to date"];
+  if(!m){$("#strip").innerHTML='<span class="muted">Run scripts/train_evaluate.py to show evaluation results.</span>';return}
+  const gain=((b-m)/b*100).toFixed(1);
+  $("#strip").innerHTML=
+    `<div class="stat"><span>Model error (MAE)</span><b>${m.toFixed(2)}</b><small>vs ${b.toFixed(2)} season-average baseline</small></div>`+
+    `<div class="stat"><span>Improvement</span><b>${gain}%</b><small>lower error</small></div>`+
+    (cap["LightGBM"]?`<div class="stat"><span>Captain pick</span><b>${cap["LightGBM"].toFixed(1)} pts</b><small>per GW vs ${cap["season average to date"].toFixed(1)}</small></div>`:"")+
+    `<p>Tested ${esc(c.evaluation)} on the ${esc(c.test_season)} season, players who had recently played.</p>`;
+}
+
+function flag(p){
+  if(p.chance_of_playing>=100 && p.status==="available") return '<span class="muted">Fit</span>';
+  const cls=p.chance_of_playing===0?"i":"d";
+  const t=p.news?esc(p.news):esc(p.status);
+  return `<span class="flag ${cls}" title="${t}">${p.chance_of_playing}% · ${esc(p.status)}</span>`;
+}
+
+async function loadPredictions(){
+  const q=new URLSearchParams({top_n:"30"});
+  if($("#f-pos").value) q.set("position",$("#f-pos").value);
+  if($("#f-price").value) q.set("max_price",$("#f-price").value);
+  if($("#f-team").value.trim()) q.set("team",$("#f-team").value.trim());
+  try{
+    const d=await api("/api/predictions?"+q);
+    maxXp=Math.max(1,...d.players.map(p=>p.expected_points_adjusted));
+    $("#rows").innerHTML=d.players.length?d.players.map(p=>`<tr>
+      <td><input type="checkbox" aria-label="Select ${esc(p.name)}" data-name="${esc(p.full_name)}" ${selected.has(p.full_name)?"checked":""}></td>
+      <td><b>${esc(p.name)}</b> <span class="muted">${esc(p.team)}</span></td>
+      <td><span class="pos">${esc(p.position)}</span></td>
+      <td>${esc(p.fixtures)}</td>
+      <td class="num">${p.price.toFixed(1)}</td>
+      <td class="num"><span class="xp">${p.expected_points_adjusted.toFixed(2)}</span><span class="bar" style="width:${Math.round(40*p.expected_points_adjusted/maxXp)}px"></span></td>
+      <td>${flag(p)}</td></tr>`).join(""):'<tr><td colspan="7" class="muted">No players match these filters.</td></tr>';
+  }catch(e){$("#rows").innerHTML=`<tr><td colspan="7" class="err">${esc(e.message)}</td></tr>`}
+}
+
+async function compare(){
+  const names=[...selected];
+  const box=$("#compare"); box.classList.add("on"); box.innerHTML='<span class="muted">Comparing…</span>';
+  try{
+    const d=await api("/api/compare?"+names.map(n=>"names="+encodeURIComponent(n)).join("&"));
+    box.innerHTML=`<div class="filters" style="justify-content:space-between;margin:0 0 8px"><h2 style="margin:0">Comparison</h2><button class="btn" id="b-close">Close</button></div><div class="cmpgrid">`+
+      d.players.map(p=>{const f=p.recent_form||{};return `<div class="cmp"><h3>${esc(p.name)}</h3>
+        <div class="muted">${esc(p.team)} · ${esc(p.position)} · £${p.price.toFixed(1)}m · ${esc(p.fixtures)}</div>
+        <dl><dt>xPts</dt><dd><b>${p.expected_points_adjusted.toFixed(2)}</b></dd>
+        <dt>Avg pts, last 5</dt><dd>${f.avg_points_last5??"–"}</dd>
+        <dt>Avg mins, last 3</dt><dd>${f.avg_minutes_last3??"–"}</dd>
+        <dt>Avg xGI, last 5</dt><dd>${f.avg_xgi_last5??"–"}</dd>
+        <dt>Season avg pts</dt><dd>${f.season_avg_points??"–"}</dd>
+        <dt>Availability</dt><dd>${p.chance_of_playing}%</dd></dl>
+        ${p.news?`<div class="muted" style="margin-top:6px">${esc(p.news)}</div>`:""}</div>`}).join("")+"</div>";
+  }catch(e){box.innerHTML=`<span class="err">${esc(e.message)}</span>`}
+}
+
+function addMsg(text,who,tools){
+  const el=document.createElement("div");
+  el.className="msg "+who; el.textContent=text;
+  if(tools&&tools.length){
+    const t=document.createElement("div"); t.className="tools";
+    t.textContent="tools: "+tools.map(x=>x.tool+"("+Object.entries(x.args).map(([k,v])=>k+"="+JSON.stringify(v)).join(", ")+")").join(" → ");
+    el.appendChild(t);
+  }
+  $("#log").appendChild(el); $("#log").scrollTop=$("#log").scrollHeight;
+  return el;
+}
+
+async function ask(text){
+  if(!chatOn||!text.trim()) return;
+  addMsg(text,"user"); $("#q").value=""; $("#send").disabled=true;
+  const wait=addMsg("Thinking…","bot");
+  try{
+    const d=await api("/api/chat",{method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({message:text,session_id:sessionId})});
+    sessionId=d.session_id; wait.remove(); addMsg(d.answer,"bot",d.tools);
+  }catch(e){wait.remove(); addMsg("Error: "+e.message,"bot")}
+  $("#send").disabled=false; $("#q").focus();
+}
+
+document.addEventListener("change",e=>{
+  const t=e.target;
+  if(t.matches("#rows input[type=checkbox]")){
+    if(t.checked){ if(selected.size>=4){t.checked=false;return} selected.add(t.dataset.name)} else selected.delete(t.dataset.name);
+    $("#b-compare").disabled=selected.size<2;
+    $("#b-compare").textContent=selected.size>=2?`Compare ${selected.size} players`:"Compare selected";
+  }
+  if(t.matches("#f-pos")) loadPredictions();
+});
+let timer; ["#f-price","#f-team"].forEach(s=>$(s).addEventListener("input",()=>{clearTimeout(timer);timer=setTimeout(loadPredictions,300)}));
+$("#b-compare").addEventListener("click",compare);
+$("#compare").addEventListener("click",e=>{if(e.target.id==="b-close")$("#compare").classList.remove("on")});
+$("#ask").addEventListener("submit",e=>{e.preventDefault();ask($("#q").value)});
+$("#suggest").addEventListener("click",e=>{if(e.target.matches("button"))ask(e.target.textContent)});
+
+(async function init(){
+  try{
+    const st=await api("/api/status");
+    const ko=new Date(st.first_kickoff);
+    $("#gw").textContent=`${st.season} · Gameweek ${st.gameweek}`;
+    $("#fresh").textContent=`Data through GW ${st.data_through_gw} · first kickoff ${ko.toLocaleString([], {weekday:"short",day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"})}`;
+    renderStrip(st);
+    chatOn=st.chat_available;
+    if(!chatOn){
+      $("#log").innerHTML='<div class="notice">Chat is off: add OPENAI_API_KEY to .env and restart the server.</div>';
+      $("#q").disabled=true; $("#send").disabled=true;
+      document.querySelectorAll("#suggest button").forEach(b=>b.disabled=true);
+    }else addMsg("Ask me about captains, transfers or injuries. I answer from the model's predictions and the latest FPL news.","bot");
+  }catch(e){$("#gw").textContent="Couldn't reach the server"; $("#fresh").textContent=e.message}
+  loadPredictions();
+})();
+})();
+</script>
+</body>
+</html>

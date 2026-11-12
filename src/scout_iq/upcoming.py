@@ -33,6 +33,7 @@ class Upcoming:
     deadline: pd.Timestamp
     predictions: pd.DataFrame  # one row per player for the gameweek
     players: pd.DataFrame      # every player this season, with status and news
+    last_played_gw: int = 0    # latest gameweek with results in the data (shows how fresh it is)
 
 
 def current_season() -> str:
@@ -127,5 +128,7 @@ def predict_next_gameweek(season: str | None = None) -> Upcoming:
     out["xpts_adjusted"] = out["xpts"] * out["chance_of_playing"] / 100.0
     out = out.sort_values("xpts_adjusted", ascending=False).reset_index(drop=True)
 
+    played = history[history.season == season]
     return Upcoming(season=season, gameweek=gw, deadline=rows["kickoff_time"].min(),
-                    predictions=out, players=players)
+                    predictions=out, players=players,
+                    last_played_gw=int(played["GW"].max()) if len(played) else 0)

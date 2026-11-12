@@ -1,126 +1,110 @@
 # scout-iq
 
-An FPL (Fantasy Premier League) scout: a machine learning model that predicts how many points each player will score next gameweek, plus an LLM agent that answers questions like *"who should I captain?"* using those predictions and the latest injury news.
+**An FPL (Fantasy Premier League) scout.** A LightGBM model predicts how many points every player will score in the next gameweek, and an LLM agent answers questions like *"who should I captain?"* using those predictions and the latest official injury news. It comes with a small web app.
 
-## Status
+![scout-iq web app](docs/screenshot.png)
 
-| Day | Goal | Status |
-|---|---|---|
-| 1 | Data, features, baselines | ✅ Done |
-| 2 | Train LightGBM, walk-forward evaluation vs baselines, feature importance | ✅ Done |
-| 3 | LLM agent with OpenAI tool calling (`get_predictions`, `compare_players`, `get_news` via RAG), LangSmith tracing | ✅ Done |
-| 4 | FastAPI + simple UI, results write-up | ⏳ |
+## Results
 
-## Day 3: the agent
-
-Ask questions in plain English. The agent answers with the model's predictions for the next gameweek and the latest official injury news.
-
-```
-$ python scripts/ask.py "Haaland or Bruno Fernandes as captain this week?"
-  [tools: compare_players(names=['Haaland', 'Bruno Fernandes']), get_news(query=...)]
-```
-
-**How it works**
-
-```
-question -> GPT (gpt-4o-mini) -> picks a tool -> Python runs it -> result back to GPT -> ... -> answer
-```
-
-| Tool | What it does |
-|---|---|
-| `get_predictions` | Ranked expected points for the next gameweek, filterable by position, max price and team |
-| `compare_players` | Side-by-side: expected points, fixtures, price, availability, recent form |
-| `get_news` | **RAG** over the official FPL injury and availability news: each news item is embedded with OpenAI embeddings and the most similar items to the question are retrieved |
-
-- **Predicting a gameweek that hasn't happened yet:** for every player in the next gameweek's fixtures I append a "not yet played" row to the history and run the same feature pipeline. Because every feature is shifted by one match, the new row's features are exactly the history up to now, with no special-case code (`src/scout_iq/upcoming.py`).
-- **The model doesn't read injury news.** Each prediction is also scaled by FPL's chance-of-playing figure (`expected_points_adjusted`), and the agent is told to check news before recommending someone.
-- **Name matching that refuses to guess.** "Salah" used to fuzzy-match a different player, "Salia", which would have let the agent confidently discuss the wrong person. Matching now uses exact name words first and fuzzy matching only for clear typos. It reports ambiguous names ("Palmer": Chelsea or Ipswich?) and missing ones instead of substituting.
-- **Guardrails in the system prompt:** base every claim on tool results, present expected points as estimates (typical error ~1.9 points), and never substitute a similar name.
-- **LangSmith tracing:** set `LANGSMITH_TRACING=true` and `LANGSMITH_API_KEY` to see every model call and tool call as a trace.
-- **Tested without an API key:** the agent loop, tools and retrieval are tested with fake OpenAI clients (`tests/test_agent.py`).
-
-**Setup:** `cp .env.example .env` and add your `OPENAI_API_KEY`. Run `python scripts/download_data.py` each week to get the latest gameweek, prices and news.
-
-## Day 2 results: the model
-
-LightGBM, tested walk-forward on 2025-26: before each gameweek it is retrained on every fixture that kicked off earlier, then predicts that gameweek, just like using it live during a season. Hyperparameters were chosen on 2024-25 (trained on 2023-24) before the test season was touched.
+Tested **walk-forward on the 2025-26 season**: before each gameweek the model is retrained on every match that kicked off earlier, then predicts that gameweek, exactly like using it live. Hyperparameters were chosen on 2024-25 before the test season was touched.
 
 | 2025-26, players in contention | MAE | RMSE | Captain pick, avg pts | Top-11 picks, avg pts | Rank correlation |
 |:--|--:|--:|--:|--:|--:|
 | **LightGBM** | **1.880** | **2.745** | **6.73** | **4.79** | **0.448** |
-| season average to date | 1.994 | 2.895 | 6.22 | 4.51 | 0.376 |
+| season average to date (best baseline) | 1.994 | 2.895 | 6.22 | 4.51 | 0.376 |
 | form: mean of last 5 | 2.084 | 3.003 | 5.00 | 4.15 | 0.365 |
 
-- **5.7% lower MAE** than the best baseline, and better in almost every single gameweek ([plot](results/day2_mae_per_gw.png)).
-- **Captaining the model's top pick** would have scored 6.7 points per gameweek, against 6.2 for the best baseline. That's about +19 captain points over a season, before doubling.
-- **Most important features** ([permutation importance](results/day2_feature_importance.png)): minutes over the last 3 matches, season points average, ownership and season BPS. Whether a player starts matters more than anything else. Fixture difficulty (opponent xG for/against) comes next.
+- **5.7% lower error** than the best baseline, and lower in almost every single gameweek.
+- **Better decisions:** captaining the model's top pick scores about 0.5 points more per gameweek, roughly +38 points over a season once the captain's points are doubled.
+- **What drives predictions:** minutes over the last 3 matches (does he start?), then season points average, ownership and BPS, then fixture difficulty.
 
-**A lesson from building it:** the first version stopped training after 18 trees. Early stopping measured MAE while the model minimises squared error, and MAE rewards a barely trained model that predicts close to the median for everyone. Matching the stopping metric to the training loss fixed it. The model now predicts expected points, which is what ranking players needs.
+<p>
+  <img src="results/day2_mae_per_gw.png" width="58%" alt="MAE per gameweek: LightGBM vs baselines">
+  <img src="results/day2_feature_importance.png" width="40%" alt="Permutation feature importance">
+</p>
 
-Full report: [`results/day2_model.md`](results/day2_model.md). The final model, trained on all three seasons, is saved in `models/lgbm.txt` for the agent.
+"Players in contention" means players who played in at least one of their last 3 matches. Most rows are squad players who never play and always score 0, which makes every method look good, so results on all rows are reported too ([full report](results/day2_model.md)).
 
-## Day 1 results: baselines
+## How it works
 
-Mean absolute error in points per player per fixture, for players in contention (played in at least one of their last 3 fixtures). Lower is better.
+```mermaid
+flowchart LR
+    A[FPL data<br/>3 past seasons + current] --> B[Leakage-safe features<br/>53 rolling stats]
+    B --> C[LightGBM<br/>expected points]
+    C --> D[Next-gameweek<br/>predictions]
+    N[Official injury news] --> E[Embeddings<br/>RAG search]
+    D --> T[Tools]
+    E --> T
+    T <--> G[GPT agent<br/>tool calling]
+    G --> W[FastAPI + web UI]
+    D --> W
+```
 
-| method | 2023-24 | 2024-25 | 2025-26 |
-|:--|--:|--:|--:|
-| always predict 0 | 2.147 | 2.138 | 2.365 |
-| form: mean of last 5 | 1.962 | 1.894 | 2.084 |
-| season average to date | **1.868** | **1.810** | **1.994** |
+**1. Data.** Gameweek data from [vaastav/Fantasy-Premier-League](https://github.com/vaastav/Fantasy-Premier-League): seasons 2023-24 to 2025-26 for training and evaluation, plus the current season for live predictions, fixtures, prices and injury news. One row per player per match, about 91,000 rows.
 
-The bar for the model on Day 2 is the season-average baseline: **1.99 MAE on 2025-26**.
+**2. Features without leakage.** 53 features per player and match: form and minutes over the last 3 and 5 matches, xG, xA, BPS, ICT, how often he plays 60+ minutes, price, ownership, home/away, and his own team's and the opponent's recent goals and xG for and against. Every feature is a rolling average over **earlier** matches only: sorted by kickoff, shifted by one match, grouped by player and season. The model only sees a whitelist of pre-kickoff columns. A **perturbation test** sets a match's points to 99, rebuilds the features and asserts that the features for that match don't change.
 
-Full tables, including all rows and FPL's own xP as a reference, are in [`results/day1_baseline.md`](results/day1_baseline.md).
+**3. Model.** LightGBM with a squared-error objective, so it predicts **expected points (the mean)** rather than the median. That's what you need for ranking and captaincy, since FPL points are skewed by rare hauls. A small grid search uses early stopping on the 2024-25 validation season.
 
-### Notes
+**4. Agent.** GPT (`gpt-4o-mini`) with OpenAI tool calling, running in a loop with a step limit:
 
-- **Why a "players in contention" subset?** Most rows are squad players who never play and score 0. Predicting 0 for them is trivial and makes every model look better than it is, so both views are reported.
-- **No leakage.** Every feature is computed only from fixtures that kicked off earlier. The tests in `tests/test_features.py` check this, including that changing a fixture's outcome does not change that fixture's features.
-- **FPL's xP is not used as a feature.** In 2025-26 it is far more accurate exactly in the gameweeks where the source dataset stored a separate xP snapshot, and worse than the simple baselines elsewhere. That suggests it can contain post-deadline information.
+| Tool | What it does |
+|---|---|
+| `get_predictions` | Ranked expected points for the next gameweek, filterable by position, price and team |
+| `compare_players` | Side by side: expected points, fixtures, price, availability, recent form |
+| `get_news` | **RAG** over official FPL injury news: each item is embedded with OpenAI embeddings and the most similar items are retrieved |
 
-## Data
+Predictions for an unplayed gameweek reuse the same pipeline: append a "not yet played" row per player and fixture, and the shifted features become exactly the history up to now. The model doesn't read news, so predictions are also scaled by FPL's chance-of-playing figure. The system prompt requires every claim to come from tool results and tells the agent the model's typical error so it presents predictions as estimates. Optional **LangSmith** tracing shows every model and tool call.
 
-Gameweek data from [vaastav/Fantasy-Premier-League](https://github.com/vaastav/Fantasy-Premier-League): seasons 2023-24 to 2025-26 for training and evaluation, plus the current season (2026-27) for live predictions, fixtures, prices and injury news. One row per player per fixture (about 91,000 rows).
+**5. App.** FastAPI backend (`/api/predictions`, `/api/compare`, `/api/news`, `/api/chat` with per-session memory) and a one-page UI. Interactive API docs are at `/docs`.
 
-## Features (53)
+## Things that went wrong, and what I learned
 
-Computed per player from previous fixtures in the same season:
+- **Early stopping on the wrong metric.** The first model stopped after 18 trees. It minimised squared error but early stopping measured MAE, and MAE rewards predicting the median, so every step toward the mean looked worse. The broken model had better MAE on one subset but lost to the baseline on RMSE and on all rows. Matching the stopping metric to the training loss gave 124 trees and a model that's better on every metric. Lesson: never trust a single metric.
+- **A leak hiding in plain sight.** The dataset has FPL's own expected points (`xP`). It looked very accurate, but only in the gameweeks where the source stored a separate xP snapshot, and it was worse than a simple average elsewhere. That suggests it was sometimes recorded after the deadline, so it's reported as a reference and never used as a feature.
+- **The agent talking about the wrong player.** "Salah" fuzzy-matched a different player, "Salia", because Salah isn't in the current season's data. Name matching now uses exact name words first and fuzzy matching only for clear typos, and it reports ambiguous ("Palmer": Chelsea or Ipswich?) or missing names instead of substituting.
 
-- **Recent form:** points, minutes, starts, bonus and BPS over the last 3 and 5 fixtures, plus season-to-date averages
-- **Underlying stats:** xG, xA, xGI, goals, assists, clean sheets, saves, ICT index, threat, creativity, influence
-- **Availability:** share of the last 5 fixtures with 60+ minutes, number of fixtures played
-- **Fixture:** home/away; own team and opponent goals for/against and xG for/against over their last 5 fixtures
-- **Market:** price and log ownership
-- **Position:** GK / DEF / MID / FWD
+## Limitations and next steps
+
+- **One test season and no confidence intervals.** The model wins almost every gameweek, but the next step is bootstrapping over gameweeks.
+- **Ownership might leak slightly.** It's a top-3 feature but is recorded per gameweek at an uncertain time. Retest using the previous gameweek's ownership.
+- **History resets each season**, so early-season predictions are weaker. Linking players across seasons would help.
+- **Data freshness.** The source dataset updates after each gameweek, so news can lag. Reading FPL's public API (`/api/bootstrap-static/`) directly would make prices and news live.
+- **The agent isn't evaluated yet.** Next is a test set of questions with expected tools and facts, scored automatically and traced in LangSmith.
 
 ## Run it
 
 ```bash
+python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env                 # add OPENAI_API_KEY
-python scripts/download_data.py      # ~20 MB into data/raw/
+cp .env.example .env                 # add OPENAI_API_KEY (needed for chat and news search)
+
+python scripts/download_data.py      # ~20 MB into data/raw/, re-run weekly
 python scripts/build_dataset.py      # -> data/processed/features.parquet
 python scripts/evaluate_baseline.py  # -> results/day1_baseline.md
 python scripts/train_evaluate.py     # -> results/day2_model.md, models/lgbm.txt (~1 min)
-python scripts/ask.py                # chat with the agent
-pytest
+
+python scripts/serve.py              # web app at http://localhost:8000 (startup ~1 min)
+python scripts/ask.py                # or chat in the terminal
+pytest                               # 16 tests, no API key needed
 ```
 
 ## Layout
 
 ```
-src/scout_iq/data.py       load and clean raw gameweek data
-src/scout_iq/features.py   leakage-safe feature engineering
-src/scout_iq/evaluate.py   baselines, MAE/RMSE, per-gameweek error
-src/scout_iq/model.py      LightGBM, hyperparameter search, walk-forward evaluation
+src/scout_iq/data.py         load and clean raw gameweek data
+src/scout_iq/features.py     leakage-safe feature engineering
+src/scout_iq/evaluate.py     baselines, MAE/RMSE, per-gameweek error
+src/scout_iq/model.py        LightGBM, hyperparameter search, walk-forward evaluation
 src/scout_iq/fpl_metrics.py  captain and top-11 pick quality, rank correlation
-src/scout_iq/upcoming.py   predictions for the next (unplayed) gameweek
-src/scout_iq/news.py       RAG over injury news (OpenAI embeddings, cosine similarity)
-src/scout_iq/tools.py      the agent's tools + JSON schemas, strict name matching
-src/scout_iq/agent.py      tool-calling loop, system prompt, LangSmith tracing
-models/                    trained model + metadata
-scripts/                   download, build, evaluate
-tests/                     leakage and sanity tests
-results/                   tables and plots
+src/scout_iq/upcoming.py     predictions for the next (unplayed) gameweek
+src/scout_iq/news.py         RAG over injury news (OpenAI embeddings, cosine similarity)
+src/scout_iq/tools.py        the agent's tools + JSON schemas, strict name matching
+src/scout_iq/agent.py        tool-calling loop, system prompt, LangSmith tracing
+src/scout_iq/api.py          FastAPI backend
+src/scout_iq/static/         web UI
+scripts/                     download, build, evaluate, train, serve, ask
+tests/                       leakage tests; agent, tools, retrieval and API tests with fake OpenAI clients
+results/                     evaluation tables and plots
+models/                      trained model + metadata
 ```
