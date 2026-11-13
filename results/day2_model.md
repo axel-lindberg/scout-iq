@@ -31,8 +31,8 @@ and actual points within each gameweek. `oracle` knows the results and shows the
 | method                 |   captain_pts_per_GW |   top11_avg_pts |   spearman_rho |
 |:-----------------------|---------------------:|----------------:|---------------:|
 | LightGBM               |                6.73  |           4.786 |          0.448 |
-| season average to date |                6.216 |           4.506 |          0.376 |
-| form: mean of last 5   |                5     |           4.15  |          0.365 |
+| season average to date |                6.216 |           4.526 |          0.376 |
+| form: mean of last 5   |                4.811 |           4.187 |          0.365 |
 | oracle                 |               17.189 |          12.666 |        nan     |
 
 ![MAE per gameweek](day2_mae_per_gw.png)

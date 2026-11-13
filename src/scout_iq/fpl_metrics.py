@@ -28,7 +28,9 @@ def pick_quality(pgw: pd.DataFrame, methods: list[str], top_k: int = 11) -> pd.D
         cap, topk, rho = [], [], []
         for _, g in pgw.groupby("GW"):
             key = "actual" if m == "oracle" else m
-            ranked = g.sort_values(key, ascending=False)
+            # Baselines often tie (same season average). A stable sort with an explicit tie-break
+            # (lowest player id first) gives the same picks on every machine and numpy version.
+            ranked = g.sort_values([key, "element"], ascending=[False, True], kind="stable")
             cap.append(ranked.iloc[0]["actual"])
             topk.append(ranked.head(top_k)["actual"].mean())
             if m != "oracle":

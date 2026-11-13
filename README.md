@@ -11,8 +11,8 @@ Tested **walk-forward on the 2025-26 season**: before each gameweek the model is
 | 2025-26, players in contention | MAE | RMSE | Captain pick, avg pts | Top-11 picks, avg pts | Rank correlation |
 |:--|--:|--:|--:|--:|--:|
 | **LightGBM** | **1.880** | **2.745** | **6.73** | **4.79** | **0.448** |
-| season average to date (best baseline) | 1.994 | 2.895 | 6.22 | 4.51 | 0.376 |
-| form: mean of last 5 | 2.084 | 3.003 | 5.00 | 4.15 | 0.365 |
+| season average to date (best baseline) | 1.994 | 2.895 | 6.22 | 4.53 | 0.376 |
+| form: mean of last 5 | 2.084 | 3.003 | 4.81 | 4.19 | 0.365 |
 
 - **5.7% lower error** than the best baseline, and lower in almost every single gameweek.
 - **Better decisions:** captaining the model's top pick scores about 0.5 points more per gameweek, roughly +38 points over a season once the captain's points are doubled.
