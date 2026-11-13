@@ -11,8 +11,8 @@ Tested **walk-forward on the 2025-26 season**: before each gameweek the model is
 | 2025-26, players in contention | MAE | RMSE | Captain pick, avg pts | Top-11 picks, avg pts | Rank correlation |
 |:--|--:|--:|--:|--:|--:|
 | **LightGBM** | **1.880** | **2.745** | **6.73** | **4.79** | **0.448** |
-| season average to date (best baseline) | 1.994 | 2.895 | 6.22 | 4.51 | 0.376 |
-| form: mean of last 5 | 2.084 | 3.003 | 5.00 | 4.15 | 0.365 |
+| season average to date (best baseline) | 1.994 | 2.895 | 6.22 | 4.53 | 0.376 |
+| form: mean of last 5 | 2.084 | 3.003 | 4.81 | 4.19 | 0.365 |
 
 - **5.7% lower error** than the best baseline, and lower in almost every single gameweek.
 - **Better decisions:** captaining the model's top pick scores about 0.5 points more per gameweek, roughly +38 points over a season once the captain's points are doubled.
@@ -40,7 +40,7 @@ flowchart LR
     D --> W
 ```
 
-**1. Data.** Gameweek data from [vaastav/Fantasy-Premier-League](https://github.com/vaastav/Fantasy-Premier-League): seasons 2023-24 to 2025-26 for training and evaluation, plus the current season for live predictions, fixtures, prices and injury news. One row per player per match, about 91,000 rows.
+**1. Data.** Past seasons (2023-24 to 2025-26, for training and evaluation) come from [vaastav/Fantasy-Premier-League](https://github.com/vaastav/Fantasy-Premier-League). The current season comes straight from the official FPL API (`bootstrap-static`, `fixtures`, and one `element-summary` per player), so it has every finished gameweek, live prices, injury news and the real next gameweek. `fpl_api.py` writes it in exactly vaastav's files and columns, so nothing downstream knows the difference. Only gameweeks that have fully finished are included, since a half-played gameweek has provisional points and only some teams' matches. A check script compares both sources over the gameweeks they share: identical row counts and identical points, minutes and xG for every player and match. One row per player per match, about 94,000 rows.
 
 **2. Features without leakage.** 53 features per player and match: form and minutes over the last 3 and 5 matches, xG, xA, BPS, ICT, how often he plays 60+ minutes, price, ownership, home/away, and his own team's and the opponent's recent goals and xG for and against. Every feature is a rolling average over **earlier** matches only: sorted by kickoff, shifted by one match, grouped by player and season. The model only sees a whitelist of pre-kickoff columns. A **perturbation test** sets a match's points to 99, rebuilds the features and asserts that the features for that match don't change.
 
@@ -69,7 +69,6 @@ Predictions for an unplayed gameweek reuse the same pipeline: append a "not yet 
 - **One test season and no confidence intervals.** The model wins almost every gameweek, but the next step is bootstrapping over gameweeks.
 - **Ownership might leak slightly.** It's a top-3 feature but is recorded per gameweek at an uncertain time. Retest using the previous gameweek's ownership.
 - **History resets each season**, so early-season predictions are weaker. Linking players across seasons would help.
-- **Data freshness.** The source dataset updates after each gameweek, so news can lag. Reading FPL's public API (`/api/bootstrap-static/`) directly would make prices and news live.
 - **The agent isn't evaluated yet.** Next is a test set of questions with expected tools and facts, scored automatically and traced in LangSmith.
 
 ## Run it
@@ -79,20 +78,32 @@ python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 cp .env.example .env                 # add OPENAI_API_KEY (needed for chat and news search)
 
-python scripts/download_data.py      # ~20 MB into data/raw/, re-run weekly
+python scripts/download_data.py      # past seasons (vaastav) + current season (FPL API), ~1 min
 python scripts/build_dataset.py      # -> data/processed/features.parquet
 python scripts/evaluate_baseline.py  # -> results/day1_baseline.md
 python scripts/train_evaluate.py     # -> results/day2_model.md, models/lgbm.txt (~1 min)
 
 python scripts/serve.py              # web app at http://localhost:8000 (startup ~1 min)
 python scripts/ask.py                # or chat in the terminal
-pytest                               # 16 tests, no API key needed
+pytest                               # 24 tests, no API key or network needed
 ```
+
+## Weekly update
+
+```bash
+python scripts/update.py             # after a gameweek finishes: download, rebuild, retrain, summary (~3 min)
+python scripts/update.py --quick     # any time: refresh prices, status and injury news only (seconds)
+```
+
+Then restart `scripts/serve.py`; the app reads the data once at startup. The full update refetches only the players whose cached history (in `data/cache/fpl_api/`) is older than the latest finished gameweek, so a second run the same week takes seconds. If a gameweek has finished since the last full update, `--quick` warns you, because the app would otherwise predict a gameweek that has already been played.
+
+`download_data.py` flags: `--quick` (as above), `--full` (ignore the cache), `--source vaastav` (old behaviour: everything from vaastav, including the current season). `python scripts/check_api_vs_vaastav.py` repeats the comparison against vaastav.
 
 ## Layout
 
 ```
 src/scout_iq/data.py         load and clean raw gameweek data
+src/scout_iq/fpl_api.py      current season from the official FPL API, in vaastav's format
 src/scout_iq/features.py     leakage-safe feature engineering
 src/scout_iq/evaluate.py     baselines, MAE/RMSE, per-gameweek error
 src/scout_iq/model.py        LightGBM, hyperparameter search, walk-forward evaluation
@@ -103,8 +114,9 @@ src/scout_iq/tools.py        the agent's tools + JSON schemas, strict name match
 src/scout_iq/agent.py        tool-calling loop, system prompt, LangSmith tracing
 src/scout_iq/api.py          FastAPI backend
 src/scout_iq/static/         web UI
-scripts/                     download, build, evaluate, train, serve, ask
-tests/                       leakage tests; agent, tools, retrieval and API tests with fake OpenAI clients
+scripts/                     download, build, evaluate, train, serve, ask, weekly update, API-vs-vaastav check
+tests/                       leakage tests; agent, tools, retrieval and API tests with fake OpenAI clients;
+                             FPL API mapping tests on saved responses (tests/fixtures/)
 results/                     evaluation tables and plots
 models/                      trained model + metadata
 ```

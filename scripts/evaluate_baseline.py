@@ -20,6 +20,12 @@ from scout_iq.evaluate import (  # noqa: E402
 
 FEATURES = ROOT / "data" / "processed" / "features.parquet"
 RESULTS = ROOT / "results"
+TEST_SEASON = "2025-26"
+
+
+def _md(t: pd.DataFrame) -> str:
+    """Markdown table with "n/a" where a method has no predictions (xP in the current season)."""
+    return t.round(3).astype(object).where(t.notna(), None).to_markdown(missingval="n/a")
 
 
 def main() -> None:
@@ -33,7 +39,10 @@ def main() -> None:
 
     tables = []
     for season, part in df.groupby("season"):
-        t = score_table(part, {k: v.loc[part.index] for k, v in preds.items()})
+        # Skip methods with no predictions in this season: FPL's xP isn't in the API, so the
+        # current season (read from the API) has none.
+        season_preds = {k: v.loc[part.index] for k, v in preds.items() if v.loc[part.index].notna().any()}
+        t = score_table(part, season_preds)
         t.insert(0, "season", season)
         tables.append(t)
     table = pd.concat(tables, ignore_index=True)
@@ -43,9 +52,11 @@ def main() -> None:
     RESULTS.mkdir(exist_ok=True)
     table.to_csv(RESULTS / "day1_baseline.csv", index=False)
 
-    test = df[df.season == df.season.max()]
+    test = df[df.season == TEST_SEASON]  # the season the text below discusses (it has xP)
     fig, ax = plt.subplots(figsize=(9, 4))
     for name in ("form: mean of last 5", "season average to date", "FPL xP (reference)"):
+        if preds[name].loc[test.index].isna().all():
+            continue
         per_gameweek_mae(test, preds[name].loc[test.index]).plot(ax=ax, label=name, marker="o", ms=3)
     ax.set_title(f"Baseline MAE per gameweek, {test.season.iloc[0]} (players in contention)")
     ax.set_xlabel("Gameweek")
@@ -62,18 +73,18 @@ def main() -> None:
         "",
         "## Players in contention (played in at least one of their last 3 fixtures)",
         "",
-        rel.round(3).to_markdown(),
+        _md(rel),
         "",
         "## All rows (includes squad players who never play)",
         "",
-        allr.round(3).to_markdown(),
+        _md(allr),
         "",
         "`FPL xP` is the official expected-points figure stored in the dataset. It is a reference,",
         "not a fair baseline: we can't verify when it was captured, so it may include information",
         "from after the deadline. The per-gameweek plot backs this up: in 2025-26 xP is far more",
         "accurate exactly in the gameweeks where the dataset has a separate xP snapshot",
         "(GW 1-9, 24, 29, 38) and worse than the simple baselines elsewhere, so we never use it",
-        "as a feature.",
+        "as a feature. It isn't in the official FPL API, so the current season has no xP (n/a).",
         "",
         "![MAE per gameweek](day1_baseline_per_gw.png)",
     ]
