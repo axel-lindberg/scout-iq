@@ -6,3 +6,6 @@ data/raw/
 data/processed/
 .pytest_cache/
 data/cache/
+node_modules/
+frontend/dist/
+frontend/coverage/

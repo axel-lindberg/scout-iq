@@ -100,3 +100,15 @@ def test_openapi_describes_every_response():
                         ("/api/compare", "CompareResponse")]:
         schema = paths[path]["get"]["responses"]["200"]["content"]["application/json"]["schema"]
         assert schema == {"$ref": f"#/components/schemas/{model}"}
+
+
+def test_committed_openapi_schema_is_current():
+    # The frontend's TypeScript types are generated from frontend/openapi.json. If this fails,
+    # the API changed: run `npm run gen:api` in frontend/ and commit the result.
+    import importlib.util
+    root = Path(__file__).resolve().parents[1]
+    spec = importlib.util.spec_from_file_location("export_openapi", root / "scripts" / "export_openapi.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    committed = (root / "frontend" / "openapi.json").read_text(encoding="utf-8")
+    assert committed == mod.as_text(mod.schema()), "frontend/openapi.json is stale: run `npm run gen:api`"
