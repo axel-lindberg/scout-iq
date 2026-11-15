@@ -35,7 +35,6 @@ WINDOWS = (3, 5)
 
 POSITIONS = ["GK", "DEF", "MID", "FWD"]
 
-
 def _rolling_past(g: pd.core.groupby.SeriesGroupBy, window: int) -> pd.Series:
     """Mean over the previous `window` rows of each group, excluding the current row."""
     return g.transform(lambda s: s.shift(1).rolling(window, min_periods=1).mean())
@@ -61,6 +60,20 @@ def add_player_features(df: pd.DataFrame) -> pd.DataFrame:
         lambda s: s.shift(1).rolling(5, min_periods=1).mean()
     )
     df["log_selected"] = np.log1p(df["selected"].clip(lower=0))
+    
+    per_gw = (
+        df.groupby(["season", "element", "GW"], sort=False)["selected"]
+          .first()
+          .reset_index()
+          .sort_values(["season", "element", "GW"])
+    )
+    per_gw["selected_prev"] = (
+        per_gw.groupby(["season", "element"])["selected"]
+        .shift(1)
+    )
+    df = df.merge(per_gw[["season", "element", "GW", "selected_prev"]], on=["season", "element", "GW"], how="left")
+    df["log_selected_prev"] = np.log1p(df["selected_prev"].clip(lower=0))
+    
     return df
 
 
@@ -105,9 +118,16 @@ def build_features(raw: pd.DataFrame) -> pd.DataFrame:
     return df.sort_values(["kickoff_time", "fixture", "element"]).reset_index(drop=True)
 
 
-def feature_columns(df: pd.DataFrame) -> list[str]:
+OWNERSHIP_FEATURES = {
+    "current": ["log_selected"],
+    "prev": ["log_selected_prev"],
+    "none": [],
+}
+
+
+def feature_columns(df: pd.DataFrame, ownership: str = "none") -> list[str]:
     """Columns a model is allowed to use (all known before kickoff)."""
-    cols = ["n_prev", "value", "was_home", "log_selected", "played60_rate5"]
+    cols = ["n_prev", "value", "was_home", *OWNERSHIP_FEATURES[ownership], "played60_rate5"]
     cols += [c for c in df.columns if any(c.startswith(f"{s}_last") for s in PLAYER_STATS)]
     cols += [c for c in df.columns if c.endswith("_season")]
     cols += [c for c in df.columns if c.startswith(("team_gf_", "team_ga_", "team_xg_", "team_xgc_",

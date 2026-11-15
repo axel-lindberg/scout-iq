@@ -10,13 +10,13 @@ Tested **walk-forward on the 2025-26 season**: before each gameweek the model is
 
 | 2025-26, players in contention | MAE | RMSE | Captain pick, avg pts | Top-11 picks, avg pts | Rank correlation |
 |:--|--:|--:|--:|--:|--:|
-| **LightGBM** | **1.880** | **2.745** | **6.73** | **4.79** | **0.448** |
+| **LightGBM** | **1.877** | **2.746** | **6.97** | **4.75** | **0.450** |
 | season average to date (best baseline) | 1.994 | 2.895 | 6.22 | 4.53 | 0.376 |
 | form: mean of last 5 | 2.084 | 3.003 | 4.81 | 4.19 | 0.365 |
 
-- **5.7% lower error** than the best baseline, and lower in almost every single gameweek.
-- **Better decisions:** captaining the model's top pick scores about 0.5 points more per gameweek, roughly +38 points over a season once the captain's points are doubled.
-- **What drives predictions:** minutes over the last 3 matches (does he start?), then season points average, ownership and BPS, then fixture difficulty.
+- **5.8% lower error** than the best baseline, and lower in almost every single gameweek.
+- **Better decisions:** captaining the model's top pick scores about 0.75 points more per gameweek, roughly +57 points over a season once the captain's points are doubled. Captain points are an average of only 38 picks, so treat this as noisy: models with near-identical MAE differed by up to 0.35 here.
+- **What drives predictions:** minutes over the last 3 matches (does he start?), then season points average, recent points and ICT, then BPS and fixture difficulty.
 
 <p>
   <img src="results/day2_mae_per_gw.png" width="58%" alt="MAE per gameweek: LightGBM vs baselines">
@@ -29,7 +29,7 @@ Tested **walk-forward on the 2025-26 season**: before each gameweek the model is
 
 ```mermaid
 flowchart LR
-    A[FPL data<br/>3 past seasons + current] --> B[Leakage-safe features<br/>53 rolling stats]
+    A[FPL data<br/>3 past seasons + current] --> B[Leakage-safe features<br/>52 rolling stats]
     B --> C[LightGBM<br/>expected points]
     C --> D[Next-gameweek<br/>predictions]
     N[Official injury news] --> E[Embeddings<br/>RAG search]
@@ -42,7 +42,7 @@ flowchart LR
 
 **1. Data.** Past seasons (2023-24 to 2025-26, for training and evaluation) come from [vaastav/Fantasy-Premier-League](https://github.com/vaastav/Fantasy-Premier-League). The current season comes straight from the official FPL API (`bootstrap-static`, `fixtures`, and one `element-summary` per player), so it has every finished gameweek, live prices, injury news and the real next gameweek. `fpl_api.py` writes it in exactly vaastav's files and columns, so nothing downstream knows the difference. Only gameweeks that have fully finished are included, since a half-played gameweek has provisional points and only some teams' matches. A check script compares both sources over the gameweeks they share: identical row counts and identical points, minutes and xG for every player and match. One row per player per match, about 94,000 rows.
 
-**2. Features without leakage.** 53 features per player and match: form and minutes over the last 3 and 5 matches, xG, xA, BPS, ICT, how often he plays 60+ minutes, price, ownership, home/away, and his own team's and the opponent's recent goals and xG for and against. Every feature is a rolling average over **earlier** matches only: sorted by kickoff, shifted by one match, grouped by player and season. The model only sees a whitelist of pre-kickoff columns. A **perturbation test** sets a match's points to 99, rebuilds the features and asserts that the features for that match don't change.
+**2. Features without leakage.** 52 features per player and match: form and minutes over the last 3 and 5 matches, xG, xA, BPS, ICT, how often he plays 60+ minutes, price, home/away, and his own team's and the opponent's recent goals and xG for and against. Every feature is a rolling average over **earlier** matches only: sorted by kickoff, shifted by one match, grouped by player and season. The model only sees a whitelist of pre-kickoff columns. A **perturbation test** sets a match's points to 99, rebuilds the features and asserts that the features for that match don't change.
 
 **3. Model.** LightGBM with a squared-error objective, so it predicts **expected points (the mean)** rather than the median. That's what you need for ranking and captaincy, since FPL points are skewed by rare hauls. A small grid search uses early stopping on the 2024-25 validation season.
 
@@ -62,12 +62,12 @@ Predictions for an unplayed gameweek reuse the same pipeline: append a "not yet 
 
 - **Early stopping on the wrong metric.** The first model stopped after 18 trees. It minimised squared error but early stopping measured MAE, and MAE rewards predicting the median, so every step toward the mean looked worse. The broken model had better MAE on one subset but lost to the baseline on RMSE and on all rows. Matching the stopping metric to the training loss gave 124 trees and a model that's better on every metric. Lesson: never trust a single metric.
 - **A leak hiding in plain sight.** The dataset has FPL's own expected points (`xP`). It looked very accurate, but only in the gameweeks where the source stored a separate xP snapshot, and it was worse than a simple average elsewhere. That suggests it was sometimes recorded after the deadline, so it's reported as a reference and never used as a feature.
+- **Ownership looked important but added nothing.** Ownership (`log_selected`) was the #3 feature by permutation importance, but it was the only raw, unshifted column, recorded each gameweek at an uncertain time, and the live pipeline could only give the model *last* week's ownership, so training and serving didn't match. I retrained the whole pipeline three ways (same-week ownership, previous-week ownership shifted per gameweek so double gameweeks can't leak, and no ownership) and compared them gameweek by gameweek with a bootstrap over gameweeks ([script](scripts/compare_ownership.py), [results](results/experiments/)). All three were within 0.006 MAE and the model without ownership was marginally best (better than previous-week ownership in 29 of 37 gameweeks), so even the possibly leaky version gave no advantage: minutes and season points already carry the same "regular starter" signal. Ownership is now dropped. Lesson: permutation importance shows what a trained model relies on, not what it needs, because correlated features take over when one is removed.
 - **The agent talking about the wrong player.** "Salah" fuzzy-matched a different player, "Salia", because Salah isn't in the current season's data. Name matching now uses exact name words first and fuzzy matching only for clear typos, and it reports ambiguous ("Palmer": Chelsea or Ipswich?) or missing names instead of substituting.
 
 ## Limitations and next steps
 
-- **One test season and no confidence intervals.** The model wins almost every gameweek, but the next step is bootstrapping over gameweeks.
-- **Ownership might leak slightly.** It's a top-3 feature but is recorded per gameweek at an uncertain time. Retest using the previous gameweek's ownership.
+- **One test season.** Gameweek bootstrapping is so far only used to compare feature variants (the ownership check); the next step is confidence intervals for the model vs the baselines, and repeating comparisons over several random seeds, since the bootstrap doesn't capture training randomness.
 - **History resets each season**, so early-season predictions are weaker. Linking players across seasons would help.
 - **The agent isn't evaluated yet.** Next is a test set of questions with expected tools and facts, scored automatically and traced in LangSmith.
 
@@ -82,10 +82,11 @@ python scripts/download_data.py      # past seasons (vaastav) + current season (
 python scripts/build_dataset.py      # -> data/processed/features.parquet
 python scripts/evaluate_baseline.py  # -> results/day1_baseline.md
 python scripts/train_evaluate.py     # -> results/day2_model.md, models/lgbm.txt (~1 min)
+python scripts/train_evaluate.py --ownership prev --experiment own_prev  # ablation run: writes to results/experiments/, leaves the deployed model alone
 
 python scripts/serve.py              # web app at http://localhost:8000 (startup ~1 min)
 python scripts/ask.py                # or chat in the terminal
-pytest                               # 24 tests, no API key or network needed
+pytest                               # 27 tests, no API key or network needed
 ```
 
 ## Weekly update
@@ -114,9 +115,10 @@ src/scout_iq/tools.py        the agent's tools + JSON schemas, strict name match
 src/scout_iq/agent.py        tool-calling loop, system prompt, LangSmith tracing
 src/scout_iq/api.py          FastAPI backend
 src/scout_iq/static/         web UI
-scripts/                     download, build, evaluate, train, serve, ask, weekly update, API-vs-vaastav check
+scripts/                     download, build, evaluate, train, serve, ask, weekly update, API-vs-vaastav check,
+                             ownership-experiment comparison
 tests/                       leakage tests; agent, tools, retrieval and API tests with fake OpenAI clients;
                              FPL API mapping tests on saved responses (tests/fixtures/)
-results/                     evaluation tables and plots
+results/                     evaluation tables and plots; experiments/ holds the ownership ablation runs
 models/                      trained model + metadata
 ```

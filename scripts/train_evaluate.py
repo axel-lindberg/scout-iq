@@ -6,6 +6,7 @@ Writes results/day2_model.md (+ csv/png) and models/lgbm.txt (trained on all sea
 from __future__ import annotations
 
 import json
+import argparse
 import sys
 from pathlib import Path
 
@@ -22,7 +23,7 @@ from scout_iq.data import ROOT  # noqa: E402
 from scout_iq.evaluate import (  # noqa: E402
     baseline_form5, baseline_season_avg, per_gameweek_mae, relevant_mask, score_table,
 )
-from scout_iq.features import TARGET, feature_columns  # noqa: E402
+from scout_iq.features import TARGET, feature_columns, OWNERSHIP_FEATURES  # noqa: E402
 from scout_iq.fpl_metrics import per_player_gw, pick_quality  # noqa: E402
 from scout_iq.model import fit, select_params, walk_forward  # noqa: E402
 
@@ -33,15 +34,26 @@ TRAIN_S, VALID_S, TEST_S = "2023-24", "2024-25", "2025-26"
 
 
 def main() -> None:
-    df = pd.read_parquet(FEATURES)
-    feats = feature_columns(df)
-    RESULTS.mkdir(exist_ok=True)
+    ap = argparse.ArgumentParser(description="Tune, walk-forward evaluate and (optionally) save LightGBM.")
+    ap.add_argument("--ownership", choices=sorted(OWNERSHIP_FEATURES), default="current")
+    ap.add_argument("--experiment", metavar="NAME",
+                    help="write to results/experiments/NAME/ and don't save the deployed model")
+    args = ap.parse_args()
+    
+    out_dir = RESULTS / "experiments" / args.experiment if args.experiment else RESULTS
+    out_dir.mkdir(parents=True, exist_ok=True)
     MODELS.mkdir(exist_ok=True)
+    
+    df = pd.read_parquet(FEATURES)
+    feats = feature_columns(df, ownership=args.ownership)
+    print(f"Ownership variant: {args.ownership} ({len(feats)} features) -> {out_dir.relative_to(ROOT)}")
+    # RESULTS.mkdir(exist_ok=True)
+    # MODELS.mkdir(exist_ok=True)
 
     # 1. Hyperparameters: train on 2023-24, validate on 2024-25. The test season is not touched.
     print(f"1/4 Selecting hyperparameters (train {TRAIN_S}, validate {VALID_S})")
     params, n_est, grid = select_params(df[df.season == TRAIN_S], df[df.season == VALID_S], feats)
-    grid.to_csv(RESULTS / "day2_grid.csv", index=False)
+    grid.to_csv(out_dir / "day2_grid.csv", index=False)
     print(grid.head(5).round(4).to_string(index=False))
 
     # 2. Walk-forward on the test season.
@@ -54,15 +66,17 @@ def main() -> None:
         "form: mean of last 5": baseline_form5(test),
     }
     table = score_table(test, preds)
-    table.to_csv(RESULTS / "day2_scores.csv", index=False)
+    table.to_csv(out_dir / "day2_scores.csv", index=False)
     out = test[["season", "GW", "element", "name", "team_name", "position", TARGET]].copy()
     out["pred_lgbm"] = pred.loc[test.index]
-    out.to_parquet(ROOT / "data" / "processed" / f"predictions_{TEST_S}.parquet", index=False)
+    pred_dir = out_dir if args.experiment else ROOT / "data" / "processed"
+    out.to_parquet(pred_dir / f"predictions_{TEST_S}.parquet", index=False)
+    # out.to_parquet(ROOT / "data" / "processed" / f"predictions_{TEST_S}.parquet", index=False)
 
     # 3. FPL pick quality.
     pgw = per_player_gw(test, preds)
     picks = pick_quality(pgw, list(preds))
-    picks.to_csv(RESULTS / "day2_picks.csv", index=False)
+    picks.to_csv(out_dir / "day2_picks.csv", index=False)
 
     # 4. Feature importance: permutation importance on the test season with a model that never saw it.
     print("3/4 Feature importance")
@@ -73,15 +87,18 @@ def main() -> None:
                                   n_repeats=3, random_state=0, n_jobs=-1)
     imp = (pd.DataFrame({"feature": feats, "MAE_increase": perm.importances_mean})
            .sort_values("MAE_increase", ascending=False))
-    imp.to_csv(RESULTS / "day2_feature_importance.csv", index=False)
+    imp.to_csv(out_dir / "day2_feature_importance.csv", index=False)
 
     # Final model on all seasons, for predictions in the agent.
-    print("4/4 Training final model on all seasons")
-    final = fit(df, feats, params, n_est)
-    final.booster_.save_model(str(MODELS / "lgbm.txt"))
-    (MODELS / "lgbm_meta.json").write_text(json.dumps(
-        {"features": feats, "params": {k: v for k, v in params.items() if k != "n_jobs"},
-         "n_estimators": n_est, "trained_on": sorted(df.season.unique().tolist())}, indent=2))
+    if not args.experiment:
+        print("4/4 Training final model on all seasons")
+        final = fit(df, feats, params, n_est)
+        final.booster_.save_model(str(MODELS / "lgbm.txt"))
+        (MODELS / "lgbm_meta.json").write_text(json.dumps(
+            {"features": feats, "params": {k: v for k, v in params.items() if k != "n_jobs"},
+             "n_estimators": n_est, "trained_on": sorted(df.season.unique().tolist())}, indent=2))
+    else:
+        print("4/4 Skipped final model (experiment run)")
 
     # Plots.
     fig, ax = plt.subplots(figsize=(9, 4))
@@ -92,7 +109,7 @@ def main() -> None:
     ax.grid(alpha=0.3)
     ax.legend()
     fig.tight_layout()
-    fig.savefig(RESULTS / "day2_mae_per_gw.png", dpi=140)
+    fig.savefig(out_dir / "day2_mae_per_gw.png", dpi=140)
 
     top = imp.head(15).iloc[::-1]
     fig, ax = plt.subplots(figsize=(7, 5))
@@ -100,7 +117,7 @@ def main() -> None:
     ax.set(title="Permutation importance (MAE increase when shuffled)", xlabel="MAE increase (points)")
     ax.grid(alpha=0.3, axis="x")
     fig.tight_layout()
-    fig.savefig(RESULTS / "day2_feature_importance.png", dpi=140)
+    fig.savefig(out_dir / "day2_feature_importance.png", dpi=140)
 
     # Report.
     rel_t = table[table.subset == "relevant"].set_index("method")[["MAE", "RMSE"]]
@@ -109,7 +126,7 @@ def main() -> None:
     gain = 100 * (base - rel_t.loc["LightGBM", "MAE"]) / base
     best_row = grid.iloc[0]
     md = [
-        "# Day 2: LightGBM vs baselines",
+        f"# Day 2: LightGBM vs baselines (ownership: {args.ownership})",
         "",
         f"Walk-forward on {TEST_S}: for every gameweek the model is retrained on all fixtures that",
         "kicked off before it, then predicts that gameweek. Hyperparameters were chosen on",
@@ -150,7 +167,7 @@ def main() -> None:
         f"n_estimators={int(best_row.n_estimators)} (early stopping), learning_rate={params['learning_rate']}.",
         "Full grid in `day2_grid.csv`.",
     ]
-    (RESULTS / "day2_model.md").write_text("\n".join(md) + "\n")
+    (out_dir / "day2_model.md").write_text("\n".join(md) + "\n")
     print("\n".join(md[6:24]))
     print(picks.round(3).to_string(index=False))
     print(imp.head(10).round(4).to_string(index=False))
