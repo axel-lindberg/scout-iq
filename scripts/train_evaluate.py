@@ -23,7 +23,7 @@ from scout_iq.data import ROOT  # noqa: E402
 from scout_iq.evaluate import (  # noqa: E402
     baseline_form5, baseline_season_avg, per_gameweek_mae, relevant_mask, score_table,
 )
-from scout_iq.features import TARGET, feature_columns, OWNERSHIP_FEATURES  # noqa: E402
+from scout_iq.features import TARGET, feature_columns, OWNERSHIP_FEATURES, DEFAULT_OWNERSHIP  # noqa: E402
 from scout_iq.fpl_metrics import per_player_gw, pick_quality  # noqa: E402
 from scout_iq.model import fit, select_params, walk_forward  # noqa: E402
 
@@ -35,7 +35,7 @@ TRAIN_S, VALID_S, TEST_S = "2023-24", "2024-25", "2025-26"
 
 def main() -> None:
     ap = argparse.ArgumentParser(description="Tune, walk-forward evaluate and (optionally) save LightGBM.")
-    ap.add_argument("--ownership", choices=sorted(OWNERSHIP_FEATURES), default="current")
+    ap.add_argument("--ownership", choices=sorted(OWNERSHIP_FEATURES), default=DEFAULT_OWNERSHIP)
     ap.add_argument("--experiment", metavar="NAME",
                     help="write to results/experiments/NAME/ and don't save the deployed model")
     args = ap.parse_args()

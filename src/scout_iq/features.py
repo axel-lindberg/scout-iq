@@ -117,7 +117,7 @@ def build_features(raw: pd.DataFrame) -> pd.DataFrame:
     df = add_team_features(df)
     return df.sort_values(["kickoff_time", "fixture", "element"]).reset_index(drop=True)
 
-
+DEFAULT_OWNERSHIP = "none"
 OWNERSHIP_FEATURES = {
     "current": ["log_selected"],
     "prev": ["log_selected_prev"],
@@ -125,7 +125,7 @@ OWNERSHIP_FEATURES = {
 }
 
 
-def feature_columns(df: pd.DataFrame, ownership: str = "none") -> list[str]:
+def feature_columns(df: pd.DataFrame, ownership: str = DEFAULT_OWNERSHIP) -> list[str]:
     """Columns a model is allowed to use (all known before kickoff)."""
     cols = ["n_prev", "value", "was_home", *OWNERSHIP_FEATURES[ownership], "played60_rate5"]
     cols += [c for c in df.columns if any(c.startswith(f"{s}_last") for s in PLAYER_STATS)]
