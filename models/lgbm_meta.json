@@ -3,7 +3,6 @@
     "n_prev",
     "value",
     "was_home",
-    "log_selected",
     "played60_rate5",
     "pts_last3",
     "pts_last5",
@@ -65,7 +64,7 @@
     "verbose": -1,
     "num_leaves": 15
   },
-  "n_estimators": 124,
+  "n_estimators": 113,
   "trained_on": [
     "2023-24",
     "2024-25",
