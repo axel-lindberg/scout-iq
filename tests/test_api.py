@@ -112,3 +112,52 @@ def test_committed_openapi_schema_is_current():
     spec.loader.exec_module(mod)
     committed = (root / "frontend" / "openapi.json").read_text(encoding="utf-8")
     assert committed == mod.as_text(mod.schema()), "frontend/openapi.json is stale: run `npm run gen:api`"
+
+
+# ---- serving the built frontend --------------------------------------------------
+
+def _frontend(tmp_path):
+    dist = tmp_path / "dist"
+    (dist / "assets").mkdir(parents=True)
+    (dist / "index.html").write_text("<div id=root>app</div>")
+    (dist / "assets" / "index-abc123.js").write_text("console.log(1)")
+    (dist / "favicon.svg").write_text("<svg/>")
+    (tmp_path / "secret.txt").write_text("outside dist")
+    up = _upcoming()
+    return TestClient(create_app(up, ScoutTools(up), FakeAgent, frontend_dist=dist))
+
+
+def test_frontend_files_and_client_side_routes(tmp_path):
+    c = _frontend(tmp_path)
+    for path in ("/", "/my-team", "/players/saka/history"):        # client-side routes -> index.html
+        r = c.get(path)
+        assert r.status_code == 200 and "app" in r.text and r.headers["cache-control"] == "no-cache"
+    js = c.get("/assets/index-abc123.js")
+    assert js.text == "console.log(1)" and "javascript" in js.headers["content-type"]
+    assert "immutable" in js.headers["cache-control"]
+    assert c.get("/favicon.svg").text == "<svg/>"
+    assert c.head("/my-team").status_code == 200
+    assert "outside dist" not in c.get("/../secret.txt").text
+    assert "outside dist" not in c.get("/assets/%2e%2e/%2e%2e/secret.txt").text
+
+
+def test_frontend_does_not_change_api_responses(tmp_path):
+    c = _frontend(tmp_path)
+    assert c.get("/api/nope").json() == {"detail": "Not Found"}        # unknown API path: JSON 404
+    assert c.get("/api/nope").status_code == 404
+    assert c.post("/api/nope").status_code == 404
+    assert c.post("/my-team").status_code == 404                      # only GET/HEAD get the app
+    assert c.get("/api/chat").status_code == 405                      # wrong method stays 405
+    assert c.get("/api/status").json()["gameweek"] == 7
+    assert c.get("/docs").status_code == 200 and "swagger" in c.get("/docs").text.lower()
+    assert c.get("/openapi.json").json()["info"]["title"] == "scout-iq"
+    assert c.get("/docs/nope").status_code == 404 and "app" not in c.get("/docs/nope").text
+
+
+def test_frontend_not_built_explains_how_to_build(tmp_path):
+    up = _upcoming()
+    c = TestClient(create_app(up, ScoutTools(up), None, frontend_dist=tmp_path / "missing"))
+    for path in ("/", "/my-team"):
+        r = c.get(path)
+        assert r.status_code == 200 and "npm run build" in r.text
+    assert c.get("/api/status").status_code == 200

@@ -13,16 +13,30 @@ from pathlib import Path
 from typing import Any, Callable
 
 import pandas as pd
-from fastapi import FastAPI, HTTPException, Query
-from fastapi.responses import FileResponse
+from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi.exception_handlers import http_exception_handler
+from fastapi.responses import FileResponse, HTMLResponse, Response
 from pydantic import BaseModel, Field
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from .data import ROOT
 from .tools import ScoutTools
 from .upcoming import Upcoming
 
-STATIC = Path(__file__).resolve().parent / "static"
+FRONTEND_DIST = ROOT / "frontend" / "dist"   # built by `npm run build` in frontend/
 MAX_SESSIONS = 200
+BACKEND_PATHS = ("/api", "/docs", "/redoc", "/openapi.json")  # never answered with the web app
+
+NOT_BUILT_PAGE = """<!doctype html><meta charset="utf-8"><title>scout-iq</title>
+<body style="font:16px/1.5 system-ui,sans-serif;max-width:40rem;margin:3rem auto;padding:0 1rem">
+<h1>scout-iq: the web app isn't built yet</h1>
+<p>The API is running (<a href="/docs">API docs</a>), but <code>frontend/dist/</code> doesn't exist. Build it once:</p>
+<pre>cd frontend
+npm ci
+npm run build</pre>
+<p>then reload this page. For development, run <code>npm run dev</code> in <code>frontend/</code> instead
+and open <a href="http://localhost:5173">http://localhost:5173</a>.</p>
+</body>"""
 
 
 # ---- response models ----------------------------------------------------------
@@ -120,15 +134,44 @@ def _model_card() -> dict:
     return card
 
 
+def _frontend_file(dist: Path, path: str) -> Response:
+    """A file from the built frontend, or index.html so the browser-side router can show the page.
+
+    Vite puts content-hashed files in assets/ (a new name whenever they change), so those can be
+    cached forever; index.html must be revalidated so a rebuild shows up on the next reload.
+    """
+    index = dist / "index.html"
+    if not index.is_file():
+        return HTMLResponse(NOT_BUILT_PAGE)
+    root = dist.resolve()
+    target = (root / path.lstrip("/")).resolve()
+    if path.strip("/") and target.is_file() and target.is_relative_to(root):   # no ../ escapes
+        cache = "public, max-age=31536000, immutable" if target.parent == root / "assets" else "no-cache"
+        return FileResponse(target, headers={"Cache-Control": cache})
+    return FileResponse(index, headers={"Cache-Control": "no-cache"})
+
+
 def create_app(upcoming: Upcoming, tools: ScoutTools,
-               agent_factory: Callable[[], object] | None) -> FastAPI:
+               agent_factory: Callable[[], object] | None,
+               frontend_dist: Path = FRONTEND_DIST) -> FastAPI:
     app = FastAPI(title="scout-iq", version="1.0")
     sessions: dict[str, object] = {}
     card = _model_card()
 
     @app.get("/", include_in_schema=False)
     def index():
-        return FileResponse(STATIC / "index.html")
+        return _frontend_file(frontend_dist, "")
+
+    # The web app is served from the 404 handler instead of a catch-all route, so the API's own
+    # responses don't change at all: a wrong method on an API route is still 405, unknown /api
+    # paths are still a JSON 404, and only requests no route matched at all reach the frontend.
+    @app.exception_handler(StarletteHTTPException)
+    async def frontend_or_error(request: Request, exc: StarletteHTTPException):
+        path = request.url.path
+        is_backend = any(path == p or path.startswith(p + "/") for p in BACKEND_PATHS)
+        if exc.status_code == 404 and request.method in ("GET", "HEAD") and not is_backend:
+            return _frontend_file(frontend_dist, path)
+        return await http_exception_handler(request, exc)
 
     @app.get("/api/status", response_model=StatusResponse, response_model_exclude_unset=True)
     def status():
