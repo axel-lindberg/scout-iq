@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import uuid
 from pathlib import Path
-from typing import Callable
+from typing import Any, Callable
 
 import pandas as pd
 from fastapi import FastAPI, HTTPException, Query
@@ -25,6 +25,75 @@ STATIC = Path(__file__).resolve().parent / "static"
 MAX_SESSIONS = 200
 
 
+# ---- response models ----------------------------------------------------------
+# These describe the dicts the tools already return, so /openapi.json documents every response
+# and the frontend can generate its TypeScript types from it. Routes use
+# response_model_exclude_unset=True: a key the tools leave out (e.g. "ambiguous") stays out,
+# so the JSON is exactly what it was before the models existed.
+
+class ModelCard(BaseModel):
+    """Headline evaluation numbers; empty ({}) until scripts/train_evaluate.py has been run."""
+    test_season: str | None = None
+    evaluation: str | None = None
+    mae: dict[str, float] | None = Field(None, description="MAE per method, e.g. 'LightGBM'")
+    captain_points_per_gw: dict[str, float] | None = None
+
+
+class StatusResponse(BaseModel):
+    season: str
+    gameweek: int
+    first_kickoff: str = Field(description="ISO 8601 timestamp of the gameweek's first kickoff")
+    data_through_gw: int = Field(description="Latest gameweek with results in the data")
+    chat_available: bool
+    news_available: bool
+    model_card: ModelCard
+
+
+class Player(BaseModel):
+    name: str
+    full_name: str
+    team: str
+    position: str
+    price: float
+    fixtures: str
+    expected_points: float
+    expected_points_adjusted: float = Field(description="expected_points x chance of playing")
+    chance_of_playing: int
+    status: str
+    news: str | None
+
+
+class PredictionsResponse(BaseModel):
+    gameweek: int
+    season: str
+    players: list[Player]
+
+
+class RecentForm(BaseModel):
+    avg_points_last5: float | None
+    avg_minutes_last3: float | None
+    avg_xgi_last5: float | None
+    season_avg_points: float | None
+    matches_played: int
+
+
+class ComparedPlayer(Player):
+    recent_form: RecentForm
+
+
+class CompareResponse(BaseModel):
+    gameweek: int
+    players: list[ComparedPlayer]
+    ambiguous: dict[str, list[str]] | None = Field(
+        None, description="Names that match several players -> up to 5 candidates each. Absent if none.")
+    not_found: list[str] | None = Field(None, description="Names that match no player. Absent if none.")
+
+
+class ToolCall(BaseModel):
+    tool: str
+    args: Any = Field(description="Arguments the agent passed (normally an object)")
+
+
 class ChatRequest(BaseModel):
     message: str = Field(min_length=1, max_length=1000)
     session_id: str | None = None
@@ -33,7 +102,7 @@ class ChatRequest(BaseModel):
 class ChatResponse(BaseModel):
     session_id: str
     answer: str
-    tools: list[dict]
+    tools: list[ToolCall]
 
 
 def _model_card() -> dict:
@@ -61,7 +130,7 @@ def create_app(upcoming: Upcoming, tools: ScoutTools,
     def index():
         return FileResponse(STATIC / "index.html")
 
-    @app.get("/api/status")
+    @app.get("/api/status", response_model=StatusResponse, response_model_exclude_unset=True)
     def status():
         return {"season": upcoming.season, "gameweek": upcoming.gameweek,
                 "first_kickoff": upcoming.deadline.isoformat(),
@@ -69,13 +138,13 @@ def create_app(upcoming: Upcoming, tools: ScoutTools,
                 "chat_available": agent_factory is not None,
                 "news_available": tools.news is not None, "model_card": card}
 
-    @app.get("/api/predictions")
+    @app.get("/api/predictions", response_model=PredictionsResponse, response_model_exclude_unset=True)
     def predictions(position: str | None = None, max_price: float | None = Query(None, gt=0),
                     team: str | None = None, top_n: int = Query(20, ge=1, le=30),
                     include_unavailable: bool = False):
         return tools.get_predictions(position, max_price, team, top_n, include_unavailable)
 
-    @app.get("/api/compare")
+    @app.get("/api/compare", response_model=CompareResponse, response_model_exclude_unset=True)
     def compare(names: list[str] = Query(..., min_length=1, max_length=6)):
         return tools.compare_players(names)
 

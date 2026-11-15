@@ -63,3 +63,40 @@ def test_chat_and_news_off_without_key():
     assert c.post("/api/chat", json={"message": "hi"}).status_code == 503
     assert c.get("/api/news", params={"q": "injury"}).status_code == 503
     assert c.post("/api/chat", json={"message": ""}).status_code == 422
+
+
+# ---- response models (OpenAPI) --------------------------------------------------
+
+def test_compare_keeps_optional_keys_optional():
+    # The response models must not add "ambiguous"/"not_found": null when the tools leave them out.
+    c = _client()
+    clean = c.get("/api/compare", params=[("names", "Haaland"), ("names", "Saka")]).json()
+    assert set(clean) == {"gameweek", "players"}
+    assert set(clean["players"][0]["recent_form"]) == {
+        "avg_points_last5", "avg_minutes_last3", "avg_xgi_last5", "season_avg_points", "matches_played"}
+    messy = c.get("/api/compare", params=[("names", "Haaland"), ("names", "Nobody Atall")]).json()
+    assert messy["not_found"] == ["Nobody Atall"] and "ambiguous" not in messy
+
+
+def test_predictions_rows_keep_their_shape():
+    row = _client().get("/api/predictions").json()["players"][1]
+    assert row == {"name": "Gabriel", "full_name": "Gabriel dos Santos", "team": "ARS", "position": "DEF",
+                   "price": 6.0, "fixtures": "XXX (H)", "expected_points": 4.0,
+                   "expected_points_adjusted": 4.0, "chance_of_playing": 100, "status": "available",
+                   "news": None}                                # null news is kept, not dropped
+
+
+def test_empty_model_card_stays_empty(monkeypatch):
+    import scout_iq.api as api
+    monkeypatch.setattr(api, "_model_card", lambda: {})
+    up = _upcoming()
+    s = TestClient(api.create_app(up, ScoutTools(up), None)).get("/api/status").json()
+    assert s["model_card"] == {} and s["chat_available"] is False
+
+
+def test_openapi_describes_every_response():
+    paths = _client().get("/openapi.json").json()["paths"]
+    for path, model in [("/api/status", "StatusResponse"), ("/api/predictions", "PredictionsResponse"),
+                        ("/api/compare", "CompareResponse")]:
+        schema = paths[path]["get"]["responses"]["200"]["content"]["application/json"]["schema"]
+        assert schema == {"$ref": f"#/components/schemas/{model}"}
