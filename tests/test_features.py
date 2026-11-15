@@ -65,3 +65,27 @@ def test_opponent_features_come_from_opponent():
     df = build_features(_toy()).set_index(["element", "fixture"])
     # Before fixture 102, team 2 conceded 1 goal per game -> opponent of player 1.
     assert df.loc[(1, 102), "opp_ga_last5"] == pytest.approx(1.0)
+    
+    
+def test_prev_ownership_ignores_this_gameweek():
+    raw = _toy()
+    raw.loc[raw.fixture == 102, "selected"] = 999_999
+    df = build_features(raw).set_index(["element", "fixture"])
+    assert df.loc[(1, 102), "log_selected_prev"] == pytest.approx(np.log1p(1000))
+    assert pd.isna(df.loc[(1, 100), "log_selected_prev"])
+    
+    
+def test_prev_ownership_double_gameweek():
+    raw = _toy()
+    raw.loc[raw.fixture.isin([101, 102]), "GW"] = 2
+
+    raw.loc[raw.GW == 1, "selected"] = 1000
+    raw.loc[raw.GW == 2, "selected"] = 2000
+
+    df = build_features(raw).set_index(["element", "fixture"])
+
+    expected = np.log1p(1000)
+
+    assert df.loc[(1, 101), "log_selected_prev"] == pytest.approx(expected)
+    assert df.loc[(1, 102), "log_selected_prev"] == pytest.approx(expected)
+    

@@ -1,4 +1,4 @@
-# Day 2: LightGBM vs baselines
+# Day 2: LightGBM vs baselines (ownership: current)
 
 Walk-forward on 2025-26: for every gameweek the model is retrained on all fixtures that
 kicked off before it, then predicts that gameweek. Hyperparameters were chosen on
