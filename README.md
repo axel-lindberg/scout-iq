@@ -1,6 +1,6 @@
 # scout-iq
 
-**An FPL (Fantasy Premier League) scout.** A LightGBM model predicts how many points every player will score in the next gameweek, and an LLM agent answers questions like *"who should I captain?"* using those predictions and the latest official injury news. It comes with a React + TypeScript web app.
+**An FPL (Fantasy Premier League) scout.** A LightGBM model predicts how many points every player will score in each of the next five gameweeks, and an LLM agent answers questions like *"who should I captain?"* using those predictions and the latest official injury news. Load your own FPL team and get the best XI, captain and transfer suggestions, worked out by deterministic code and explained by the agent. It comes with a React + TypeScript web app.
 
 ![scout-iq web app](docs/screenshot.png)
 
@@ -31,7 +31,10 @@ Tested **walk-forward on the 2025-26 season**: before each gameweek the model is
 flowchart LR
     A[FPL data<br/>3 past seasons + current] --> B[Leakage-safe features<br/>52 rolling stats]
     B --> C[LightGBM<br/>expected points]
-    C --> D[Next-gameweek<br/>predictions]
+    C --> D[Next 5 gameweeks<br/>predictions]
+    D --> M[My team<br/>best XI + transfers]
+    F[Your FPL team<br/>public API] --> M
+    M --> T
     N[Official injury news] --> E[Embeddings<br/>RAG search]
     D --> T[Tools]
     E --> T
@@ -53,14 +56,29 @@ flowchart LR
 | `get_predictions` | Ranked expected points for the next gameweek, filterable by position, price and team |
 | `compare_players` | Side by side: expected points, fixtures, price, availability, recent form |
 | `get_news` | **RAG** over official FPL injury news: each item is embedded with OpenAI embeddings and the most similar items are retrieved |
+| `analyze_my_team` | The user's squad (sent by the app): best XI, captain, weakest players and legal transfers, from `team.py` |
 
-Predictions for an unplayed gameweek reuse the same pipeline: append a "not yet played" row per player and fixture, and the shifted features become exactly the history up to now. The model doesn't read news, so predictions are also scaled by FPL's chance-of-playing figure. The system prompt requires every claim to come from tool results and tells the agent the model's typical error so it presents predictions as estimates. Optional **LangSmith** tracing shows every model and tool call.
+Predictions for unplayed gameweeks reuse the same pipeline: append a "not yet played" row per player and fixture, and the shifted features become exactly the history up to now. For the next five gameweeks the future fixtures are built in separate slots (each team plays at most once per slot), so every one uses form as of today and only the opponent and venue change; a double gameweek adds both fixtures and a blank is 0. That is also the weakness: the model knows nothing about form, rotation or injuries further ahead, so later gameweeks are shown as less certain (in the app and in the agent's prompt). How fast the error grows with the lead time is the next experiment. The model doesn't read news, so predictions are also scaled by FPL's chance-of-playing figure (for later gameweeks too, unless the news gives a return date like "Expected back 22 Nov"). The system prompt requires every claim to come from tool results and tells the agent the model's typical error so it presents predictions as estimates. Optional **LangSmith** tracing shows every model and tool call.
 
-**5. App.** A FastAPI backend (`/api/status`, `/api/predictions`, `/api/compare`, `/api/news`, `/api/chat` with per-session memory; interactive docs at `/docs`) and a **React + TypeScript** frontend in `frontend/`, built with Vite:
+**5. My team.** Enter your FPL team ID (public data only, never a password) or pick 15 players by hand. The backend reads the squad from the latest passed deadline (`entry/{id}/`, `.../history/`, `.../event/{gw}/picks/`), estimates your free transfers from the history, and `team.py` answers deterministically:
 
-- **Predictions table** with position, price and team filters (typed filters are debounced), an expected-points bar and an availability badge whose tooltip shows the official injury news.
+- **Best XI**: 1 GK, at least 3 DEF, 2 MID, 1 FWD. Points add up and the rules only limit counts per position, so for each of the 8 legal formations the best XI is just the top players of each position; try all 8. The squad's best player is always in it, so he's captain; the bench is ordered by expected points.
+- **Transfers**: a squad is worth its best XI plus the captain again, every gameweek, summed over five gameweeks. Every legal single transfer (same position, within bank + the seller's price, max 3 per club, not already owned) is scored exactly: about 3,000 swaps; the whole analysis, pairs included, takes about 0.4 s. Pairs are first estimated as the sum of two single gains (a price-sorted running maximum finds the best partner within budget), then the top 60 are re-scored exactly. Each transfer beyond the free ones costs 4 points.
+- It's code, not the LLM, because the rules must always hold and the answer must be reproducible and testable; the agent calls it through `analyze_my_team` and explains the result.
+
+<p>
+  <img src="docs/my_team_xi.png" width="49%" alt="My team: best XI on a pitch with captain and bench">
+  <img src="docs/my_team_transfers.png" width="49%" alt="My team: transfer suggestions with gain per gameweek">
+</p>
+
+**Limitations, shown in the app:** selling prices aren't public (FPL keeps half of any price rise), so players are valued at today's price and the bank is editable; free transfers are an estimate you can override; transfers made since the last deadline aren't public yet; bench points and auto-subs are ignored.
+
+**6. App.** A FastAPI backend (`/api/status`, `/api/predictions` (`horizon=1-5`, `rank_by`), `/api/compare`, `/api/news`, `/api/players`, `POST /api/team/analyze`, `POST /api/chat` with per-session memory and an optional `team`; interactive docs at `/docs`) and a **React + TypeScript** frontend in `frontend/`, built with Vite:
+
+- **Predictions table** with the next gameweek plus the four after it (faded: less certain), a five-gameweek total and a rank-by toggle, position, price and team filters (typed filters are debounced), an expected-points bar and an availability badge whose tooltip shows the official injury news.
 - **Compare** 2-4 players side by side: expected points, recent form, minutes, xGI, season average and availability. Names the backend can't resolve are shown as *ambiguous* (with the candidates) or *not found* instead of silently disappearing.
-- **Chat** with the agent, which keeps the session id so it remembers the conversation and shows the tools it called (name and arguments) under each answer.
+- **My team** page: load by team ID (remembered in the browser) or build the squad by hand with the rules checked as you go; pitch view of the XI and bench with captain marked, expected points per gameweek, weakest players, transfer suggestions with the gain per gameweek, editable bank and free transfers.
+- **Chat** with the agent (it knows your loaded team), which keeps the session id so it remembers the conversation and shows the tools it called (name and arguments) under each answer.
 - Light and dark mode from the system setting, works down to phone width, fully keyboard usable, respects reduced motion.
 
 All API calls go through **TanStack Query** (loading, error and caching states). The response **types are generated from FastAPI's OpenAPI schema** with `openapi-typescript`: the routes declare Pydantic response models, `scripts/export_openapi.py` writes the schema to `frontend/openapi.json`, and `npm run gen:api` regenerates `src/api/schema.gen.ts`. A backend test fails if the committed schema is out of date, so the backend and frontend can't silently drift apart. Styling is Tailwind CSS; tests use Vitest and React Testing Library against a mocked API. In production FastAPI serves the built app from `frontend/dist/` and returns `index.html` for client-side routes, so new pages only need a route in `frontend/src/app/routes.tsx`.
@@ -76,7 +94,9 @@ All API calls go through **TanStack Query** (loading, error and caching states).
 
 - **One test season.** Gameweek bootstrapping is so far only used to compare feature variants (the ownership check); the next step is confidence intervals for the model vs the baselines, and repeating comparisons over several random seeds, since the bootstrap doesn't capture training randomness.
 - **History resets each season**, so early-season predictions are weaker. Linking players across seasons would help.
-- **The agent isn't evaluated yet.** Next is a test set of questions with expected tools and facts, scored automatically and traced in LangSmith.
+- **Predictions further ahead aren't evaluated yet**: how much MAE grows 1, 2, 3 gameweeks ahead with form frozen at the cutoff.
+- **My team ignores the bench** (auto-subs) and doesn't value rolling a transfer; selling prices aren't public.
+- **The agent isn't evaluated yet.** In a real check it recommended the tool's transfer but added an unsupported "reliable performer" remark. Next is a test set of questions with expected tools and facts, scored automatically and traced in LangSmith.
 
 ## Run it
 
@@ -94,7 +114,7 @@ python scripts/train_evaluate.py --ownership prev --experiment own_prev  # ablat
 cd frontend && npm ci && npm run build && cd ..   # build the web app once (needs Node, see below)
 python scripts/serve.py              # web app at http://localhost:8000 (startup ~1 min)
 python scripts/ask.py                # or chat in the terminal
-pytest                               # 35 tests, no API key or network needed
+pytest                               # 68 tests, no API key or network needed
 ```
 
 ### Web app
@@ -142,12 +162,13 @@ Then restart `scripts/serve.py`; the app reads the data once at startup. The ful
 
 ```
 src/scout_iq/data.py         load and clean raw gameweek data
-src/scout_iq/fpl_api.py      current season from the official FPL API, in vaastav's format
+src/scout_iq/fpl_api.py      current season from the official FPL API, in vaastav's format; a manager's team
 src/scout_iq/features.py     leakage-safe feature engineering
 src/scout_iq/evaluate.py     baselines, MAE/RMSE, per-gameweek error
 src/scout_iq/model.py        LightGBM, hyperparameter search, walk-forward evaluation
 src/scout_iq/fpl_metrics.py  captain and top-11 pick quality, rank correlation
-src/scout_iq/upcoming.py     predictions for the next (unplayed) gameweek
+src/scout_iq/upcoming.py     predictions for the next 5 (unplayed) gameweeks
+src/scout_iq/team.py         best XI, captain, weakest players, transfer search (deterministic)
 src/scout_iq/news.py         RAG over injury news (OpenAI embeddings, cosine similarity)
 src/scout_iq/tools.py        the agent's tools + JSON schemas, strict name matching
 src/scout_iq/agent.py        tool-calling loop, system prompt, LangSmith tracing
@@ -155,7 +176,7 @@ src/scout_iq/api.py          FastAPI backend: routes, response models, serves fr
 frontend/                    React + TypeScript web app (Vite)
   src/api/                   fetch client, TanStack Query hooks, generated OpenAPI types
   src/app/                   routes and page layout (add new pages in routes.tsx)
-  src/features/              predictions, compare, chat, status header and model card
+  src/features/              predictions, compare, chat, my team, status header and model card
   src/components/, src/lib/  shared UI (badge, tooltip, card) and helpers
   openapi.json               API schema snapshot the types are generated from
 scripts/                     download, build, evaluate, train, serve, ask, weekly update, API-vs-vaastav check,

@@ -1,7 +1,6 @@
 # scout-iq: project memory
 
-Claude Code reads this at the start of every session. Keep it under ~150 lines, factual and current.
-
+Read at the start of every session. Keep it under ~150 lines, factual and current.
 **Keeping it current is part of every task.** At the end of any task that changes the architecture,
 commands, conventions, results, status or a decision, update this file in the same branch without
 being asked. Delete what is no longer true instead of appending.
@@ -117,7 +116,6 @@ some experiments himself, so leave those as next steps instead of doing them.
 
 ## Current status
 
-- Model, agent, API and React app are done; CI is green on `main`.
 - Predictions cover the next 5 gameweeks (`/api/predictions?horizon=5`, faded columns in the table).
 - My team page + `analyze_my_team` tool, checked end to end on Axel's real team (2026-11-17).
 - Known limits: no selling prices (public API), free transfers estimated, the agent sometimes adds
