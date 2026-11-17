@@ -34,7 +34,15 @@ Rules:
 - Be concise: lead with the recommendation, then 2-4 bullet points of reasons with numbers.
 - If a tool reports a name as ambiguous, ask which player the user means. If a name is not
   found, say the player isn't in this season's squads; never substitute a similar name.
+- Questions about "my team", "my squad", "who should I sell/bench/captain from my team": call
+  analyze_my_team. It returns the best XI, captain, weakest players and transfers that respect the
+  budget, positions and the 3-per-club rule, with 4-point hits already subtracted. Recommend from
+  its results; don't build your own XI or transfers. If it says no team is loaded, ask the user to
+  load it on the My team page. Mention that selling prices may be lower than today's prices.
 - If the user asks about something the tools can't answer, say so."""
+
+TEAM_NOTE = ("The user has loaded their FPL team{name} in the app: {players}. Bank £{bank}m, {ft} free "
+             "transfer(s). Use analyze_my_team for questions about it.")
 
 
 def _maybe_trace(client):
@@ -59,14 +67,32 @@ class ScoutAgent:
         self.messages: list[dict] = [{"role": "system", "content": SYSTEM_PROMPT.format(
             gw=tools.up.gameweek, season=tools.up.season, first_gw=gws[0], last_gw=gws[-1])}]
         self.trace: list[dict] = []  # tool calls made in the last ask(), for display and tests
+        self.team: dict | None = None  # the user's squad, sent by the app with each message
         self.ask = self._traceable(name="scout-iq ask", run_type="chain")(self.ask)
         self._run_tool = self._traceable(name="tool", run_type="tool")(self._run_tool)
 
     def _run_tool(self, name: str, args: dict) -> dict:
-        return self.tools.call(name, args)
+        return self.tools.call(name, args, team=self.team)
 
-    def ask(self, question: str) -> str:
+    def set_team(self, team: dict | None) -> None:
+        """Remember the user's squad; tell the model once whenever it changes."""
+        if team == self.team:
+            return
+        self.team = team
+        if team is None:
+            note = "The user has cleared their team; analyze_my_team won't work until they load one."
+        else:
+            info = self.tools.pool.info
+            names = [info.at[e, "web_name"] if e in info.index else str(e) for e in team.get("player_ids", [])]
+            name = f" \"{team['team_name']}\"" if team.get("team_name") else ""
+            note = TEAM_NOTE.format(name=name, players=", ".join(names), bank=team.get("bank", 0.0),
+                                    ft=team.get("free_transfers", 1))
+        self.messages.append({"role": "system", "content": note})
+
+    def ask(self, question: str, team: dict | None = None) -> str:
         self.trace = []
+        if team is not None or self.team is not None:
+            self.set_team(team)
         self.messages.append({"role": "user", "content": question})
         for _ in range(MAX_STEPS):
             resp = self.client.chat.completions.create(

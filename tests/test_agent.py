@@ -149,3 +149,52 @@ def test_system_prompt_names_the_horizon_and_its_uncertainty():
     assert "gameweeks 7-11" in prompt and "less certain" in prompt
     schema = next(t for t in TOOL_SCHEMAS if t["function"]["name"] == "get_predictions")
     assert "horizon" in schema["function"]["parameters"]["properties"]
+
+
+# ---- my team ---------------------------------------------------------------------------
+
+class TeamChat:
+    """Scripted model: asks for analyze_my_team, then answers with the suggested sale and captain."""
+
+    def __init__(self):
+        self.calls = []
+
+    def create(self, model, messages, tools, temperature):
+        self.calls.append(messages[:])
+        assert "analyze_my_team" in [t["function"]["name"] for t in tools]
+        tool_msgs = [m for m in messages if m["role"] == "tool"]
+        if not tool_msgs:
+            return NS(choices=[NS(message=NS(content=None, tool_calls=[_tool_call(1, "analyze_my_team", {})]))])
+        res = json.loads(tool_msgs[-1]["content"])
+        if "error" in res:
+            return NS(choices=[NS(message=NS(content=res["error"], tool_calls=None))])
+        best = res["best_single_transfers"][0]
+        return NS(choices=[NS(message=NS(
+            content=f"Sell {best['sell'][0]} for {best['buy'][0]}. Captain {res['next_gameweek']['captain']}.",
+            tool_calls=None))])
+
+
+def test_agent_analyses_my_team_with_the_tool():
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    import team_data
+    from test_team import BUYS
+    up, ids = team_data.upcoming(extra=BUYS)
+    chat = TeamChat()
+    agent = ScoutAgent(ScoutTools(up), NS(chat=NS(completions=chat)))
+    team = {"player_ids": ids, "bank": 0.0, "free_transfers": 1, "team_name": "Test FC"}
+    answer = agent.ask("Who should I sell this week?", team=team)
+    assert answer.startswith("Sell WeakMid for GoodMid (T20, £6.0m).")
+    assert agent.trace == [{"tool": "analyze_my_team", "args": {}}]
+    # The model was told once that a team is loaded, with the players' names.
+    notes = [m["content"] for m in chat.calls[0] if m["role"] == "system"]
+    assert len(notes) == 2 and '"Test FC"' in notes[1] and "WeakMid" in notes[1] and "1 free" in notes[1]
+    tool_result = json.loads([m for m in agent.messages if m["role"] == "tool"][0]["content"])
+    assert len(tool_result["next_gameweek"]["starting_xi"]) == 11
+    assert tool_result["best_single_transfers"][0]["gain_per_gameweek"] == [8.0, 8.0]
+    agent.ask("And again?", team=team)                     # same team: no second note
+    assert sum(m["role"] == "system" for m in agent.messages) == 2
+
+
+def test_agent_without_a_team_is_told_to_ask_for_one():
+    agent = ScoutAgent(ScoutTools(_upcoming()), NS(chat=NS(completions=TeamChat())))
+    assert "load their team on the My team page" in agent.ask("Who should I sell?")

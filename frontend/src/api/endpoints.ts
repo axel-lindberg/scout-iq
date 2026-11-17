@@ -13,6 +13,14 @@ export type Comparison = Schemas["CompareResponse"];
 export type ChatRequest = Schemas["ChatRequest"];
 export type ChatResponse = Schemas["ChatResponse"];
 export type ToolCall = Schemas["ToolCall"];
+export type TeamContext = Schemas["TeamContext"];
+export type TeamRequest = Schemas["TeamRequest"];
+export type TeamAnalysis = Schemas["TeamAnalysis"];
+export type SquadPlayer = Schemas["SquadPlayer"];
+export type SquadPlayerBrief = Schemas["SquadPlayerBrief"];
+export type Transfer = Schemas["TransferOut"];
+export type EntryInfo = Schemas["EntryInfo"];
+export type PlayerOption = Schemas["PlayerOption"];
 
 export type PredictionsQuery = NonNullable<paths["/api/predictions"]["get"]["parameters"]["query"]>;
 
@@ -44,5 +52,18 @@ export function postChat(body: ChatRequest): Promise<ChatResponse> {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
+  });
+}
+
+export function getPlayers(signal?: AbortSignal): Promise<{ players: PlayerOption[] }> {
+  return apiFetch<Schemas["PlayersResponse"]>("/api/players", { signal: signal ?? null });
+}
+
+export function postTeamAnalyze(body: TeamRequest, signal?: AbortSignal): Promise<TeamAnalysis> {
+  return apiFetch<TeamAnalysis>("/api/team/analyze", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+    signal: signal ?? null,
   });
 }

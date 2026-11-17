@@ -12,11 +12,31 @@ import unicodedata
 import pandas as pd
 from rapidfuzz import fuzz
 
+from . import team as team_mod
 from .news import NewsIndex
 from .upcoming import Upcoming
 
 POSITIONS = ["GK", "DEF", "MID", "FWD"]
 FUZZY_CUTOFF = 85  # high on purpose: "Salah" must not silently become "Salia"
+
+LIMITATIONS = [
+    "Selling prices aren't in the public FPL API (FPL keeps half of any price rise), so players are "
+    "valued at today's price. Your real budget can be a little lower: edit the bank if you know it.",
+    "Free transfers are estimated from your transfer history; override the number if the FPL app differs. "
+    "Each transfer beyond the free ones costs 4 points.",
+    "Transfers made since the last deadline aren't public until the next deadline, so the squad is the "
+    "one FPL showed at the last deadline.",
+    "Gameweeks further ahead are less certain: they use each player's form as of today.",
+    "Bench points and automatic substitutions are ignored: the best XI is picked again every gameweek.",
+]
+
+
+class TeamError(ValueError):
+    """The squad breaks the rules; .errors lists why."""
+
+    def __init__(self, errors: list[str]):
+        super().__init__("; ".join(errors))
+        self.errors = errors
 
 
 def _norm(s: str) -> str:
@@ -42,6 +62,14 @@ class ScoutTools:
                 "expected_points": round(float(r.xpts), 2),
                 "expected_points_adjusted": round(float(r.xpts_adjusted), 2),
             })
+
+    _pool: team_mod.Pool | None = None
+
+    @property
+    def pool(self) -> team_mod.Pool:
+        if self._pool is None:
+            self._pool = team_mod.build_pool(self.up.players, self.up.by_gw, self.gameweeks)
+        return self._pool
 
     def _horizon(self, horizon: int | None) -> int:
         return max(1, min(int(horizon or 1), len(self.gameweeks)))
@@ -165,7 +193,132 @@ class ScoutTools:
             return {"error": "News search is unavailable (no OpenAI client)."}
         return {"results": self.news.search(query, top_k=min(top_k, 10))}
 
-    def call(self, name: str, args: dict) -> dict:
+    # ---- my team ----------------------------------------------------------------
+    def player_list(self) -> list[dict]:
+        """Every player, for picking a squad by hand."""
+        info = self.pool.info
+        totals = self.pool.xpts.sum(axis=1)
+        out = []
+        for e, r in info.iterrows():
+            out.append({"id": int(e), "name": r["web_name"], "full_name": r["name"], "team": r["team_short"],
+                        "position": r["position"], "price": float(r["price"]),
+                        "status": r.get("status_text", r.get("status", "")),
+                        "expected_points_horizon_adjusted": round(float(totals[self.pool.row[e]]), 2)})
+        return sorted(out, key=lambda p: (-p["expected_points_horizon_adjusted"], p["id"]))
+
+    def _brief(self, e: int, horizon: int) -> dict:
+        r = self.pool.info.loc[e]
+        x = self.pool.xpts[self.pool.row[e], :horizon]
+        chance = team_mod.availability_flag(r)
+        return {"id": int(e), "name": r["web_name"], "team": r["team_short"], "position": r["position"],
+                "price": float(r["price"]), "availability": chance, "news": r.get("news") or None,
+                "expected_points": [round(float(v), 2) for v in x],
+                "expected_points_horizon_adjusted": round(float(x.sum()), 2)}
+
+    def analyze_team(self, player_ids: list[int], bank: float, free_transfers: int, horizon: int | None = None,
+                     include_pairs: bool = True, top_n: int = 10, allow_club_overflow: bool = False) -> dict:
+        """Best XI, captain, weakest players and transfer suggestions for a squad (see team.py)."""
+        pool = self.pool
+        ids = [int(e) for e in player_ids]
+        errors = team_mod.validate_squad(pool.info, ids)
+        warnings = []
+        if allow_club_overflow:   # FPL lets a squad keep 4 from a club after a player moves there
+            warnings = [e for e in errors if e.startswith("At most")]
+            errors = [e for e in errors if not e.startswith("At most")]
+        if errors:
+            raise TeamError(errors)
+        h = self._horizon(horizon or len(self.gameweeks))
+        a = team_mod.analyze_squad(pool, ids, float(bank), int(free_transfers), horizon=h, top_n=top_n,
+                                   pairs=include_pairs)
+        lineup = a["lineup"]
+        squad = []
+        for p in a["players"]:
+            e = p["element"]
+            r = pool.info.loc[e]
+            gws = self.player_gameweeks(e, h)
+            squad.append({
+                **self._brief(e, h), "full_name": r["name"],
+                "chance_of_playing": int(team_mod.chance_or_default(r)),
+                "status": r.get("status_text", ""),
+                "gameweeks": gws,
+                "in_xi": p["in_xi"], "bench_order": p["bench_order"],
+                "is_captain": p["is_captain"], "is_vice_captain": p["is_vice_captain"],
+            })
+        order = {e: n for n, e in enumerate(lineup.starters + lineup.bench)}
+        squad.sort(key=lambda s: order[s["id"]])
+        by_id = {s["id"]: s for s in squad}
+        weakest = []
+        for e in a["weakest"]:
+            s = by_id[e]
+            reason = {"out": "unavailable", "doubtful": "doubtful"}.get(s["availability"], "low expected points")
+            weakest.append({"id": e, "name": s["name"], "reason": reason,
+                            "expected_points_horizon_adjusted": s["expected_points_horizon_adjusted"]})
+
+        def move(c):
+            return {"out": [self._brief(e, h) for e in c["out"]], "in": [self._brief(e, h) for e in c["in"]],
+                    "gain_per_gameweek": [round(float(v), 2) for v in c["per_gw"]],
+                    "gain": round(c["gain"], 2), "hits": c["hits"], "net_gain": round(c["net_gain"], 2),
+                    "bank_after": round(c["bank_after"], 1)}
+
+        return {
+            "gameweeks": a["gameweeks"], "bank": round(float(bank), 1), "free_transfers": int(free_transfers),
+            "squad": squad,
+            "lineup": {"gameweek": a["gameweeks"][0], "formation": lineup.formation,
+                       "starters": lineup.starters, "bench": lineup.bench,
+                       "captain": lineup.captain, "vice_captain": lineup.vice_captain,
+                       "expected_points": round(lineup.points, 2)},
+            "squad_expected_points": [round(v, 2) for v in a["squad_points_per_gw"]],
+            "weakest": weakest,
+            "transfers": [move(c) for c in a["singles"]],
+            "transfer_pairs": [move(c) for c in a["pairs"]],
+            "warnings": warnings, "limitations": LIMITATIONS,
+        }
+
+    def analyze_my_team(self, team: dict | None, horizon: int | None = None, include_pairs: bool = True) -> dict:
+        """The agent's view of analyze_team: names instead of ids, top suggestions only."""
+        if not team or not team.get("player_ids"):
+            return {"error": "No team loaded. Ask the user to load their team on the My team page first "
+                             "(FPL team ID or picked by hand)."}
+        try:
+            a = self.analyze_team(team["player_ids"], team.get("bank", 0.0), team.get("free_transfers", 1),
+                                  horizon=horizon, include_pairs=include_pairs, top_n=5,
+                                  allow_club_overflow=True)
+        except TeamError as e:
+            return {"error": f"The loaded team isn't a valid squad: {e}"}
+        names = {s["id"]: s["name"] for s in a["squad"]}
+        lu = a["lineup"]
+
+        def move(m):
+            return {"sell": [p["name"] for p in m["out"]], "buy": [f"{p['name']} ({p['team']}, £{p['price']}m)"
+                                                                    for p in m["in"]],
+                    "gain_per_gameweek": m["gain_per_gameweek"], "hits": m["hits"], "net_gain": m["net_gain"],
+                    "bank_after": m["bank_after"]}
+
+        return {
+            "team_name": team.get("team_name"), "gameweeks": a["gameweeks"], "bank": a["bank"],
+            "free_transfers": a["free_transfers"],
+            "next_gameweek": {"formation": lu["formation"], "captain": names[lu["captain"]],
+                              "vice_captain": names[lu["vice_captain"]],
+                              "starting_xi": [names[e] for e in lu["starters"]],
+                              "bench_in_order": [names[e] for e in lu["bench"]],
+                              "expected_points": lu["expected_points"]},
+            "squad": [{"name": s["name"], "team": s["team"], "position": s["position"], "price": s["price"],
+                       "expected_points_per_gameweek": s["expected_points"],
+                       "expected_points_total": s["expected_points_horizon_adjusted"],
+                       "availability": s["availability"], "news": s["news"]} for s in a["squad"]],
+            "weakest": a["weakest"],
+            "best_single_transfers": [move(m) for m in a["transfers"]],
+            "best_double_transfers": [move(m) for m in a["transfer_pairs"][:3]],
+            "notes": a["warnings"] + ["Gains are expected points over the horizon minus 4 per extra transfer; "
+                                      "prices are today's (selling prices may be lower)."],
+        }
+
+    def call(self, name: str, args: dict, team: dict | None = None) -> dict:
+        if name == "analyze_my_team":
+            try:
+                return self.analyze_my_team(team, **args)
+            except TypeError as e:
+                return {"error": f"Bad arguments for {name}: {e}"}
         fn = {"get_predictions": self.get_predictions, "compare_players": self.compare_players,
               "get_news": self.get_news}.get(name)
         if fn is None:
@@ -212,5 +365,17 @@ TOOL_SCHEMAS = [
             "query": {"type": "string", "description": "What to look for, e.g. 'Arsenal defenders injured'"},
             "top_k": {"type": "integer", "description": "Number of news items (default 5)"},
         }, "required": ["query"]},
+    }},
+    {"type": "function", "function": {
+        "name": "analyze_my_team",
+        "description": ("Analyse the user's own FPL squad (loaded in the app): best starting XI for the next "
+                        "gameweek, captain and vice-captain, bench order, each player's expected points per "
+                        "gameweek, weakest players, and the best transfers within budget ranked by expected "
+                        "points gained over the horizon minus 4-point hits. Use for any question about 'my "
+                        "team': who to sell, who to captain, who to bench, which transfer to make."),
+        "parameters": {"type": "object", "properties": {
+            "horizon": {"type": "integer", "description": "Gameweeks to plan over, 1-5 (default 5)"},
+            "include_pairs": {"type": "boolean", "description": "Also suggest two transfers together (default true)"},
+        }},
     }},
 ]

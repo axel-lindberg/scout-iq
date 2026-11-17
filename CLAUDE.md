@@ -27,10 +27,13 @@ model without ownership; source `results/day2_scores.csv`, `results/day2_picks.c
 Data flow: FPL API (current season) / vaastav repo (past seasons) -> `data/raw/<season>/` (vaastav's
 CSV format) -> `features.py` -> LightGBM (`models/lgbm.txt`) -> `upcoming.py` (predictions for the
 next 5 gameweeks) -> `tools.py` / `agent.py` -> `api.py` (FastAPI) -> React app in `frontend/`.
+My team: FPL entry endpoints (`fpl_api.fetch_entry_team`) or 15 hand-picked ids -> `team.py`
+(per-GW xPts from `Upcoming.by_gw`) -> `POST /api/team/analyze` and the agent's `analyze_my_team`.
 
 `src/scout_iq/`
 - `data.py`: load and clean `merged_gw.csv` per season into one row per player per fixture.
-- `fpl_api.py`: HTTP client for the official FPL API; writes the current season in vaastav's format.
+- `fpl_api.py`: HTTP client for the official FPL API; writes the current season in vaastav's format;
+  loads a manager's squad from the public entry endpoints and estimates free transfers.
 - `features.py`: leakage-safe rolling features; `feature_columns()` is the whitelist the model sees.
 - `evaluate.py`: baselines, MAE/RMSE, "players in contention" mask.
 - `model.py`: LightGBM fit, grid search with early stopping (on l2), walk-forward evaluation.
@@ -39,18 +42,26 @@ next 5 gameweeks) -> `tools.py` / `agent.py` -> `api.py` (FastAPI) -> React app 
   pipeline, built per slot (a team plays at most once per slot) so every future fixture uses form as
   of today; double gameweeks sum, blanks are 0. `by_gw` = one row per player per gameweek. Chance of
   playing: FPL's next-GW figure, kept for later GWs unless the news gives a return date.
+- `team.py`: deterministic squad feedback: rules check, best XI (try all 8 formations), captain,
+  bench order, weakest players, exact single-transfer search, pairs (sum-of-singles estimate, then
+  exact re-score). Objective: best XI + captain per GW, summed over the horizon, minus 4 per hit.
 - `news.py`: RAG over injury news (OpenAI embeddings, cosine similarity, cached index).
-- `tools.py`: the agent's tools and their JSON schemas (`horizon`, `rank_by`); strict name matching.
-- `agent.py`: tool-calling loop, system prompt, optional LangSmith tracing.
-- `api.py`: FastAPI routes + Pydantic response models; serves `frontend/dist/`.
+- `tools.py`: the agent's tools and their JSON schemas (`horizon`, `rank_by`, `analyze_my_team`);
+  strict name matching; `analyze_team()` shared by the API and the agent.
+- `agent.py`: tool-calling loop, system prompt, optional LangSmith tracing; `ask(q, team=...)` adds a
+  system note when the user's squad changes and passes it to `analyze_my_team`.
+- `api.py`: FastAPI routes + Pydantic response models; serves `frontend/dist/`. Stateless except chat
+  sessions: `/api/team/analyze` takes `team_id` or `player_ids` each time; `/api/players`.
 
 `frontend/src/`
 - `api/`: `client.ts` (fetch + ApiError), `endpoints.ts` (one function per route), `queries.ts`
   (TanStack Query hooks), `schema.gen.ts` (generated, never edit by hand).
 - `app/`: `routes.tsx` (all pages), `Layout.tsx` (header + outlet).
-- `pages/`: `ScoutPage` (predictions + chat), `NotFoundPage`.
-- `features/`: `predictions/`, `compare/`, `chat/`, `status/` (header, model card).
-- `components/`, `lib/`: shared UI (Card, Tooltip, AvailabilityBadge) and helpers.
+- `pages/`: `ScoutPage` (predictions + chat), `MyTeamPage` (team + chat), `NotFoundPage`.
+- `features/`: `predictions/`, `compare/`, `chat/`, `status/` (header + nav, model card), `team/` (load by
+  ID, `SquadBuilder`, `Pitch`, `SquadTable`, `Transfers`, `TeamSettings`).
+- `components/`, `lib/`: shared UI (Card, Tooltip, AvailabilityBadge) and helpers; `lib/teamStore.ts`
+  keeps the squad in localStorage (the chat sends it); `lib/squad.ts` mirrors the squad rules.
 - `test/`: fixtures, mocked fetch (`mockApi.ts`), `renderApp()`.
 
 ## Commands
@@ -82,7 +93,8 @@ cd frontend && npm run gen:api       # after changing an API response model
 - Past-season evaluation results in `results/` must stay unchanged unless a change is intended and
   explained in the PR and in the decisions log below.
 - FPL's own `xP` is never a feature (it was sometimes recorded after the deadline).
-- Never ask for the user's FPL password or use logged-in endpoints.
+- Never ask for the user's FPL password or use logged-in endpoints (`/my-team/`).
+- Squad optimisation is deterministic code in `team.py`, never the LLM; the agent only explains it.
 
 ## Conventions
 
@@ -107,6 +119,9 @@ some experiments himself, so leave those as next steps instead of doing them.
 
 - Model, agent, API and React app are done; CI is green on `main`.
 - Predictions cover the next 5 gameweeks (`/api/predictions?horizon=5`, faded columns in the table).
+- My team page + `analyze_my_team` tool, checked end to end on Axel's real team (2026-11-17).
+- Known limits: no selling prices (public API), free transfers estimated, the agent sometimes adds
+  claims the tool didn't give (e.g. "reliable"): an agent eval would catch this.
 
 ## Next steps
 
@@ -116,6 +131,8 @@ some experiments himself, so leave those as next steps instead of doing them.
 
 - Confidence intervals for model vs baselines (gameweek bootstrap) and several random seeds.
 - An agent evaluation set (questions with expected tools and facts), traced in LangSmith.
+- Bench value / auto-subs in the team objective (bench points count 0 now), and a "roll the
+  transfer" option valued explicitly.
 - Link players across seasons so early-season predictions improve.
 
 ## Decisions log
@@ -130,3 +147,7 @@ some experiments himself, so leave those as next steps instead of doing them.
 - 2026-11-15: API types generated from FastAPI's OpenAPI schema so backend and frontend can't drift.
 - 2026-11-17: Multi-gameweek predictions build each slot separately instead of one build with all
   future rows, which would count unplayed matches inside the rolling windows. Next-GW output unchanged.
+- 2026-11-17: Team optimisation in Python, not the LLM: hard rules (formation, budget, club limit)
+  must always hold and the answer must be reproducible and testable.
+- 2026-11-17: Team endpoint stateless (team_id or player_ids per request); the frontend keeps the
+  squad in localStorage and sends it with chat messages.

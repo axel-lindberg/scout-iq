@@ -179,3 +179,72 @@ def test_no_rows_gives_empty_frame_with_columns():
         e["finished"] = False
     df = fpl_api.merged_gw(c.files["bootstrap-static"], c.files["fixtures"], {})
     assert df.empty and list(df.columns) == fpl_api.MERGED_COLUMNS
+
+
+# ---- a manager's team (entry endpoints) -----------------------------------------------
+# Saved from the live API (personal fields removed, team renamed). Picks of GW 10; history:
+# chips bboost GW2, wildcard GW3, freehit GW5; transfers 1 (GW6), 2 (GW8), 3 (GW9), 1 (GW10), no hits.
+
+class EntryClient:
+    def __init__(self, mutate=None):
+        self.files = {
+            "entry/1234567": json.loads((FIXTURES / "entry-1234567.json").read_text()),
+            "entry/1234567/history": json.loads((FIXTURES / "entry-1234567-history.json").read_text()),
+            "entry/1234567/event/10/picks": json.loads((FIXTURES / "entry-1234567-event-10-picks.json").read_text()),
+        }
+        if mutate:
+            mutate(self.files)
+        self.paths: list[str] = []
+
+    def get(self, path):
+        self.paths.append(path)
+        if path not in self.files:
+            raise urllib.error.HTTPError(path, 404, "Not Found", {}, None)
+        return copy.deepcopy(self.files[path])
+
+
+def test_entry_team_from_saved_responses():
+    t = fpl_api.fetch_entry_team(EntryClient(), 1234567)
+    assert t.team_name == "Sample XI" and t.overall_rank == 1859136
+    assert t.picks_gameweek == 10                                  # current_event: latest passed deadline
+    assert t.player_ids[:2] == [1, 8] and len(t.player_ids) == 15 == len(set(t.player_ids))
+    assert t.bank == pytest.approx(0.9) and t.squad_value == pytest.approx(102.5)   # tenths -> £m
+    assert t.captain in t.player_ids and t.vice_captain in t.player_ids and t.captain != t.vice_captain
+    assert [c["name"] for c in t.chips_used] == ["bboost", "wildcard", "freehit"]
+    # By hand: 1 after GW1, +1 each week, chips GW3/GW5 keep them, capped at 5 by GW6; then
+    # GW8 2 made (5-2+1=4), GW9 3 made (4-3+1=2), GW10 1 made (2-1+1=2).
+    assert t.free_transfers == 2 and "GW 3, 5" in t.free_transfers_note
+    assert t.notes == [] and t.active_chip is None
+
+
+def test_free_transfers_reanchor_on_a_hit_and_cap_at_five():
+    h = {"chips": [], "current": [{"event": g, "event_transfers": 0, "event_transfers_cost": 0} for g in range(1, 9)]}
+    assert fpl_api.estimate_free_transfers(h, 1, 8)[0] == 5         # saved up, capped
+    h["current"][7] = {"event": 8, "event_transfers": 7, "event_transfers_cost": 8}
+    assert fpl_api.estimate_free_transfers(h, 1, 8)[0] == 1         # a hit used them all: 0 + 1
+    late = {"chips": [], "current": [{"event": g, "event_transfers": 0, "event_transfers_cost": 0} for g in (6, 7)]}
+    assert fpl_api.estimate_free_transfers(late, 6, 7)[0] == 2      # joined in GW 6
+
+
+def test_free_hit_squad_is_replaced_by_the_real_one():
+    def freehit(files):
+        files["entry/1234567/event/10/picks"]["active_chip"] = "freehit"
+        gw9 = copy.deepcopy(files["entry/1234567/event/10/picks"])
+        gw9["active_chip"] = None
+        gw9["picks"][0]["element"] = 999
+        gw9["entry_history"]["bank"] = 25
+        files["entry/1234567/event/9/picks"] = gw9
+    client = EntryClient(freehit)
+    t = fpl_api.fetch_entry_team(client, 1234567)
+    assert client.paths[-1] == "entry/1234567/event/9/picks"
+    assert t.picks_gameweek == 9 and t.player_ids[0] == 999 and t.bank == pytest.approx(2.5)
+    assert "Free Hit" in t.notes[0]
+
+
+def test_unknown_team_and_team_without_a_gameweek():
+    with pytest.raises(fpl_api.EntryNotFound):
+        fpl_api.fetch_entry_team(EntryClient(), 42)
+    def new(files):
+        files["entry/1234567"]["current_event"] = None
+    with pytest.raises(fpl_api.EntryNotFound):
+        fpl_api.fetch_entry_team(EntryClient(new), 1234567)

@@ -1,10 +1,11 @@
 import type { RouteObject } from "react-router";
+import { MyTeamPage } from "../pages/MyTeamPage";
 import { NotFoundPage } from "../pages/NotFoundPage";
 import { ScoutPage } from "../pages/ScoutPage";
 import { Layout } from "./Layout";
 
 /**
- * Every page of the app. To add one (e.g. "my team"), add a route here; FastAPI already serves
+ * Every page of the app. To add one, add a route here; FastAPI already serves
  * index.html for any non-API path, so deep links work in production too.
  */
 export const routes: RouteObject[] = [
@@ -13,6 +14,7 @@ export const routes: RouteObject[] = [
     element: <Layout />,
     children: [
       { index: true, element: <ScoutPage /> },
+      { path: "my-team", element: <MyTeamPage /> },
       { path: "*", element: <NotFoundPage /> },
     ],
   },
