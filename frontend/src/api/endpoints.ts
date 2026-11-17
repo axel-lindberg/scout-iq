@@ -6,6 +6,7 @@ type Schemas = components["schemas"];
 export type Status = Schemas["StatusResponse"];
 export type ModelCard = Schemas["ModelCard"];
 export type Player = Schemas["Player"];
+export type GameweekPrediction = Schemas["GameweekPrediction"];
 export type Predictions = Schemas["PredictionsResponse"];
 export type ComparedPlayer = Schemas["ComparedPlayer"];
 export type Comparison = Schemas["CompareResponse"];

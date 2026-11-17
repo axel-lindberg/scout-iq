@@ -41,14 +41,16 @@ describe("helpers", () => {
   });
 
   it("toQuery drops empty and invalid filters", () => {
-    expect(toQuery({ position: "", maxPrice: "", team: "  " })).toEqual({ top_n: 30 });
-    expect(toQuery({ position: "MID", maxPrice: "7.5", team: " ars " })).toEqual({
+    expect(toQuery({ position: "", maxPrice: "", team: "  ", rankBy: "next" })).toEqual({ top_n: 30, horizon: 5 });
+    expect(toQuery({ position: "MID", maxPrice: "7.5", team: " ars ", rankBy: "horizon" })).toEqual({
       top_n: 30,
+      horizon: 5,
+      rank_by: "horizon",
       position: "MID",
       max_price: 7.5,
       team: "ars",
     });
-    expect(toQuery({ position: "", maxPrice: "0", team: "" }).max_price).toBeUndefined();
-    expect(toQuery({ position: "", maxPrice: "-2", team: "" }).max_price).toBeUndefined();
+    expect(toQuery({ position: "", maxPrice: "0", team: "", rankBy: "next" }).max_price).toBeUndefined();
+    expect(toQuery({ position: "", maxPrice: "-2", team: "", rankBy: "next" }).max_price).toBeUndefined();
   });
 });

@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import uuid
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Literal
 
 import pandas as pd
 from fastapi import FastAPI, HTTPException, Query, Request
@@ -21,7 +21,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from .data import ROOT
 from .tools import ScoutTools
-from .upcoming import Upcoming
+from .upcoming import HORIZON, Upcoming
 
 FRONTEND_DIST = ROOT / "frontend" / "dist"   # built by `npm run build` in frontend/
 MAX_SESSIONS = 200
@@ -58,9 +58,17 @@ class StatusResponse(BaseModel):
     gameweek: int
     first_kickoff: str = Field(description="ISO 8601 timestamp of the gameweek's first kickoff")
     data_through_gw: int = Field(description="Latest gameweek with results in the data")
+    horizon_gameweeks: list[int] = Field(description="Gameweeks with predictions, the next one first")
     chat_available: bool
     news_available: bool
     model_card: ModelCard
+
+
+class GameweekPrediction(BaseModel):
+    gameweek: int
+    fixtures: str = Field(description="e.g. 'ARS (H)', 'ARS (H), CHE (A)' in a double gameweek, '' if blank")
+    expected_points: float
+    expected_points_adjusted: float
 
 
 class Player(BaseModel):
@@ -75,12 +83,17 @@ class Player(BaseModel):
     chance_of_playing: int
     status: str
     news: str | None
+    gameweeks: list[GameweekPrediction] | None = Field(
+        None, description="Per-gameweek predictions, only when horizon > 1. Later ones are less certain.")
+    expected_points_horizon_adjusted: float | None = Field(
+        None, description="Sum of expected_points_adjusted over the horizon, only when horizon > 1")
 
 
 class PredictionsResponse(BaseModel):
     gameweek: int
     season: str
     players: list[Player]
+    gameweeks: list[int] | None = Field(None, description="The horizon's gameweeks, only when horizon > 1")
 
 
 class RecentForm(BaseModel):
@@ -178,18 +191,22 @@ def create_app(upcoming: Upcoming, tools: ScoutTools,
         return {"season": upcoming.season, "gameweek": upcoming.gameweek,
                 "first_kickoff": upcoming.deadline.isoformat(),
                 "data_through_gw": upcoming.last_played_gw,
+                "horizon_gameweeks": list(upcoming.gameweeks),
                 "chat_available": agent_factory is not None,
                 "news_available": tools.news is not None, "model_card": card}
 
     @app.get("/api/predictions", response_model=PredictionsResponse, response_model_exclude_unset=True)
     def predictions(position: str | None = None, max_price: float | None = Query(None, gt=0),
                     team: str | None = None, top_n: int = Query(20, ge=1, le=30),
-                    include_unavailable: bool = False):
-        return tools.get_predictions(position, max_price, team, top_n, include_unavailable)
+                    include_unavailable: bool = False,
+                    horizon: int = Query(1, ge=1, le=HORIZON, description="Gameweeks ahead (1 = next only)"),
+                    rank_by: Literal["next", "horizon"] = "next"):
+        return tools.get_predictions(position, max_price, team, top_n, include_unavailable, horizon, rank_by)
 
     @app.get("/api/compare", response_model=CompareResponse, response_model_exclude_unset=True)
-    def compare(names: list[str] = Query(..., min_length=1, max_length=6)):
-        return tools.compare_players(names)
+    def compare(names: list[str] = Query(..., min_length=1, max_length=6),
+                horizon: int = Query(1, ge=1, le=HORIZON)):
+        return tools.compare_players(names, horizon)
 
     @app.get("/api/news")
     def news(q: str = Query(..., min_length=2), top_k: int = Query(5, ge=1, le=10)):

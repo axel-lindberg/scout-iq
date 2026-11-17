@@ -5,6 +5,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+import pandas as pd
 from fastapi.testclient import TestClient
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
@@ -161,3 +162,46 @@ def test_frontend_not_built_explains_how_to_build(tmp_path):
         r = c.get(path)
         assert r.status_code == 200 and "npm run build" in r.text
     assert c.get("/api/status").status_code == 200
+
+
+# ---- several gameweeks ahead ------------------------------------------------------
+
+def _two_gameweeks():
+    """GW 7 as in _upcoming(); in GW 8 Gabriel has a double and Haaland a blank."""
+    up = _upcoming()
+    p = up.predictions
+    gw8 = {"Haaland": (0.0, ""), "Saka": (5.0, "CHE (H)"), "Gabriel": (9.0, "CHE (H), MCI (A)"),
+           "Injured": (4.0, "ARS (A)")}
+    rows = []
+    for r in p.itertuples():
+        rows.append((r.element, 7, r.xpts, r.xpts_adjusted, r.chance_of_playing, r.fixtures, 1))
+        x, fx = gw8[r.web_name]
+        adj = x * r.chance_of_playing / 100
+        rows.append((r.element, 8, x, adj, r.chance_of_playing, fx, fx.count("(")))
+    up.by_gw = pd.DataFrame(rows, columns=["element", "GW", "xpts", "xpts_adjusted", "chance_of_playing",
+                                           "fixtures", "n_fixtures"])
+    up.gameweeks = [7, 8]
+    return TestClient(create_app(up, ScoutTools(up), FakeAgent))
+
+
+def test_predictions_horizon():
+    c = _two_gameweeks()
+    assert c.get("/api/status").json()["horizon_gameweeks"] == [7, 8]
+    default = c.get("/api/predictions").json()
+    assert "gameweeks" not in default and "gameweeks" not in default["players"][0]   # unchanged shape
+    r = c.get("/api/predictions", params={"horizon": 2}).json()
+    assert r["gameweeks"] == [7, 8]
+    assert [p["name"] for p in r["players"]] == ["Haaland", "Gabriel", "Saka"]     # still next-GW order
+    haaland = r["players"][0]
+    assert haaland["gameweeks"] == [
+        {"gameweek": 7, "fixtures": "XXX (H)", "expected_points": 6.0, "expected_points_adjusted": 6.0},
+        {"gameweek": 8, "fixtures": "", "expected_points": 0.0, "expected_points_adjusted": 0.0}]
+    assert haaland["expected_points_horizon_adjusted"] == 6.0
+    ranked = c.get("/api/predictions", params={"horizon": 2, "rank_by": "horizon"}).json()["players"]
+    assert [p["name"] for p in ranked] == ["Gabriel", "Haaland", "Saka"]           # 13, 6, 5
+    assert c.get("/api/predictions", params={"horizon": 9}).status_code == 422
+
+
+def test_horizon_is_clamped_to_available_gameweeks():
+    r = _client().get("/api/predictions", params={"horizon": 3}).json()            # only GW 7 known
+    assert "gameweeks" not in r

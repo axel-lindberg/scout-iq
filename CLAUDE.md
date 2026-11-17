@@ -26,7 +26,7 @@ model without ownership; source `results/day2_scores.csv`, `results/day2_picks.c
 
 Data flow: FPL API (current season) / vaastav repo (past seasons) -> `data/raw/<season>/` (vaastav's
 CSV format) -> `features.py` -> LightGBM (`models/lgbm.txt`) -> `upcoming.py` (predictions for the
-next gameweeks) -> `tools.py` / `agent.py` -> `api.py` (FastAPI) -> React app in `frontend/`.
+next 5 gameweeks) -> `tools.py` / `agent.py` -> `api.py` (FastAPI) -> React app in `frontend/`.
 
 `src/scout_iq/`
 - `data.py`: load and clean `merged_gw.csv` per season into one row per player per fixture.
@@ -35,9 +35,12 @@ next gameweeks) -> `tools.py` / `agent.py` -> `api.py` (FastAPI) -> React app in
 - `evaluate.py`: baselines, MAE/RMSE, "players in contention" mask.
 - `model.py`: LightGBM fit, grid search with early stopping (on l2), walk-forward evaluation.
 - `fpl_metrics.py`: captain / top-11 pick quality and rank correlation.
-- `upcoming.py`: predictions for unplayed gameweeks ("not yet played" rows + the normal pipeline).
+- `upcoming.py`: predictions for the next `HORIZON` (5) gameweeks: "not yet played" rows + the normal
+  pipeline, built per slot (a team plays at most once per slot) so every future fixture uses form as
+  of today; double gameweeks sum, blanks are 0. `by_gw` = one row per player per gameweek. Chance of
+  playing: FPL's next-GW figure, kept for later GWs unless the news gives a return date.
 - `news.py`: RAG over injury news (OpenAI embeddings, cosine similarity, cached index).
-- `tools.py`: the agent's tools and their JSON schemas; strict player-name matching.
+- `tools.py`: the agent's tools and their JSON schemas (`horizon`, `rank_by`); strict name matching.
 - `agent.py`: tool-calling loop, system prompt, optional LangSmith tracing.
 - `api.py`: FastAPI routes + Pydantic response models; serves `frontend/dist/`.
 
@@ -103,8 +106,13 @@ some experiments himself, so leave those as next steps instead of doing them.
 ## Current status
 
 - Model, agent, API and React app are done; CI is green on `main`.
+- Predictions cover the next 5 gameweeks (`/api/predictions?horizon=5`, faded columns in the table).
 
 ## Next steps
+
+- **Axel's experiment:** horizon accuracy. How does MAE grow when predicting 1, 2, 3+ gameweeks
+  ahead with form frozen at the cutoff (walk-forward, cutoff = kickoff of GW g, predict g+k)? Not
+  implemented on purpose; `upcoming_features()` is the piece to reuse.
 
 - Confidence intervals for model vs baselines (gameweek bootstrap) and several random seeds.
 - An agent evaluation set (questions with expected tools and facts), traced in LangSmith.
@@ -120,3 +128,5 @@ some experiments himself, so leave those as next steps instead of doing them.
   were within 0.006 MAE; no ownership was marginally best (MAE 1.877).
 - 2026-11-15: Vite + React, not Next.js: the backend is FastAPI, no server rendering is needed.
 - 2026-11-15: API types generated from FastAPI's OpenAPI schema so backend and frontend can't drift.
+- 2026-11-17: Multi-gameweek predictions build each slot separately instead of one build with all
+  future rows, which would count unplayed matches inside the rolling windows. Next-GW output unchanged.

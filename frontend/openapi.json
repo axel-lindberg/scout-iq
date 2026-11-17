@@ -122,6 +122,18 @@
             "title": "Expected Points Adjusted",
             "type": "number"
           },
+          "expected_points_horizon_adjusted": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Sum of expected_points_adjusted over the horizon, only when horizon > 1",
+            "title": "Expected Points Horizon Adjusted"
+          },
           "fixtures": {
             "title": "Fixtures",
             "type": "string"
@@ -129,6 +141,21 @@
           "full_name": {
             "title": "Full Name",
             "type": "string"
+          },
+          "gameweeks": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/GameweekPrediction"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Per-gameweek predictions, only when horizon > 1. Later ones are less certain.",
+            "title": "Gameweeks"
           },
           "name": {
             "title": "Name",
@@ -180,6 +207,35 @@
           "recent_form"
         ],
         "title": "ComparedPlayer",
+        "type": "object"
+      },
+      "GameweekPrediction": {
+        "properties": {
+          "expected_points": {
+            "title": "Expected Points",
+            "type": "number"
+          },
+          "expected_points_adjusted": {
+            "title": "Expected Points Adjusted",
+            "type": "number"
+          },
+          "fixtures": {
+            "description": "e.g. 'ARS (H)', 'ARS (H), CHE (A)' in a double gameweek, '' if blank",
+            "title": "Fixtures",
+            "type": "string"
+          },
+          "gameweek": {
+            "title": "Gameweek",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "gameweek",
+          "fixtures",
+          "expected_points",
+          "expected_points_adjusted"
+        ],
+        "title": "GameweekPrediction",
         "type": "object"
       },
       "HTTPValidationError": {
@@ -268,6 +324,18 @@
             "title": "Expected Points Adjusted",
             "type": "number"
           },
+          "expected_points_horizon_adjusted": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Sum of expected_points_adjusted over the horizon, only when horizon > 1",
+            "title": "Expected Points Horizon Adjusted"
+          },
           "fixtures": {
             "title": "Fixtures",
             "type": "string"
@@ -275,6 +343,21 @@
           "full_name": {
             "title": "Full Name",
             "type": "string"
+          },
+          "gameweeks": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/GameweekPrediction"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Per-gameweek predictions, only when horizon > 1. Later ones are less certain.",
+            "title": "Gameweeks"
           },
           "name": {
             "title": "Name",
@@ -329,6 +412,21 @@
           "gameweek": {
             "title": "Gameweek",
             "type": "integer"
+          },
+          "gameweeks": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "integer"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The horizon's gameweeks, only when horizon > 1",
+            "title": "Gameweeks"
           },
           "players": {
             "items": {
@@ -431,6 +529,14 @@
             "title": "Gameweek",
             "type": "integer"
           },
+          "horizon_gameweeks": {
+            "description": "Gameweeks with predictions, the next one first",
+            "items": {
+              "type": "integer"
+            },
+            "title": "Horizon Gameweeks",
+            "type": "array"
+          },
           "model_card": {
             "$ref": "#/components/schemas/ModelCard"
           },
@@ -448,6 +554,7 @@
           "gameweek",
           "first_kickoff",
           "data_through_gw",
+          "horizon_gameweeks",
           "chat_available",
           "news_available",
           "model_card"
@@ -575,6 +682,18 @@
               "minItems": 1,
               "title": "Names",
               "type": "array"
+            }
+          },
+          {
+            "in": "query",
+            "name": "horizon",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "maximum": 5,
+              "minimum": 1,
+              "title": "Horizon",
+              "type": "integer"
             }
           }
         ],
@@ -726,6 +845,34 @@
               "default": false,
               "title": "Include Unavailable",
               "type": "boolean"
+            }
+          },
+          {
+            "description": "Gameweeks ahead (1 = next only)",
+            "in": "query",
+            "name": "horizon",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "description": "Gameweeks ahead (1 = next only)",
+              "maximum": 5,
+              "minimum": 1,
+              "title": "Horizon",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "rank_by",
+            "required": false,
+            "schema": {
+              "default": "next",
+              "enum": [
+                "next",
+                "horizon"
+              ],
+              "title": "Rank By",
+              "type": "string"
             }
           }
         ],

@@ -29,3 +29,8 @@ export function formatToolCall(call: ToolCall): string {
   else inner = JSON.stringify(args);
   return `${call.tool}(${inner})`;
 }
+
+/** Fade predictions further ahead: they're less certain. 0 = the next gameweek. */
+export function aheadOpacity(weeksAhead: number): number {
+  return Math.max(0.55, 1 - 0.1 * weeksAhead);
+}

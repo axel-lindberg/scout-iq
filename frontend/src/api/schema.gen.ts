@@ -139,10 +139,20 @@ export interface components {
              * @description expected_points x chance of playing
              */
             expected_points_adjusted: number;
+            /**
+             * Expected Points Horizon Adjusted
+             * @description Sum of expected_points_adjusted over the horizon, only when horizon > 1
+             */
+            expected_points_horizon_adjusted?: number | null;
             /** Fixtures */
             fixtures: string;
             /** Full Name */
             full_name: string;
+            /**
+             * Gameweeks
+             * @description Per-gameweek predictions, only when horizon > 1. Later ones are less certain.
+             */
+            gameweeks?: components["schemas"]["GameweekPrediction"][] | null;
             /** Name */
             name: string;
             /** News */
@@ -156,6 +166,20 @@ export interface components {
             status: string;
             /** Team */
             team: string;
+        };
+        /** GameweekPrediction */
+        GameweekPrediction: {
+            /** Expected Points */
+            expected_points: number;
+            /** Expected Points Adjusted */
+            expected_points_adjusted: number;
+            /**
+             * Fixtures
+             * @description e.g. 'ARS (H)', 'ARS (H), CHE (A)' in a double gameweek, '' if blank
+             */
+            fixtures: string;
+            /** Gameweek */
+            gameweek: number;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -194,10 +218,20 @@ export interface components {
              * @description expected_points x chance of playing
              */
             expected_points_adjusted: number;
+            /**
+             * Expected Points Horizon Adjusted
+             * @description Sum of expected_points_adjusted over the horizon, only when horizon > 1
+             */
+            expected_points_horizon_adjusted?: number | null;
             /** Fixtures */
             fixtures: string;
             /** Full Name */
             full_name: string;
+            /**
+             * Gameweeks
+             * @description Per-gameweek predictions, only when horizon > 1. Later ones are less certain.
+             */
+            gameweeks?: components["schemas"]["GameweekPrediction"][] | null;
             /** Name */
             name: string;
             /** News */
@@ -215,6 +249,11 @@ export interface components {
         PredictionsResponse: {
             /** Gameweek */
             gameweek: number;
+            /**
+             * Gameweeks
+             * @description The horizon's gameweeks, only when horizon > 1
+             */
+            gameweeks?: number[] | null;
             /** Players */
             players: components["schemas"]["Player"][];
             /** Season */
@@ -249,6 +288,11 @@ export interface components {
             first_kickoff: string;
             /** Gameweek */
             gameweek: number;
+            /**
+             * Horizon Gameweeks
+             * @description Gameweeks with predictions, the next one first
+             */
+            horizon_gameweeks: number[];
             model_card: components["schemas"]["ModelCard"];
             /** News Available */
             news_available: boolean;
@@ -324,6 +368,7 @@ export interface operations {
         parameters: {
             query: {
                 names: string[];
+                horizon?: number;
             };
             header?: never;
             path?: never;
@@ -391,6 +436,9 @@ export interface operations {
                 team?: string | null;
                 top_n?: number;
                 include_unavailable?: boolean;
+                /** @description Gameweeks ahead (1 = next only) */
+                horizon?: number;
+                rank_by?: "next" | "horizon";
             };
             header?: never;
             path?: never;

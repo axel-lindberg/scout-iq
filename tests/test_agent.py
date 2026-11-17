@@ -14,7 +14,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from scout_iq.agent import ScoutAgent  # noqa: E402
 from scout_iq.news import NewsIndex, news_documents  # noqa: E402
-from scout_iq.tools import ScoutTools  # noqa: E402
+from scout_iq.tools import TOOL_SCHEMAS, ScoutTools  # noqa: E402
 from scout_iq.upcoming import Upcoming  # noqa: E402
 
 
@@ -139,3 +139,13 @@ def test_agent_stops_after_max_steps():
             return NS(choices=[NS(message=NS(content=None, tool_calls=[_tool_call(1, "get_predictions", {})]))])
     agent = ScoutAgent(ScoutTools(_upcoming()), NS(chat=NS(completions=Loopy())))
     assert "step limit" in agent.ask("loop forever")
+
+
+def test_system_prompt_names_the_horizon_and_its_uncertainty():
+    up = _upcoming()
+    up.gameweeks = [7, 8, 9, 10, 11]
+    agent = ScoutAgent(ScoutTools(up), NS(chat=NS(completions=FakeChat())))
+    prompt = agent.messages[0]["content"]
+    assert "gameweeks 7-11" in prompt and "less certain" in prompt
+    schema = next(t for t in TOOL_SCHEMAS if t["function"]["name"] == "get_predictions")
+    assert "horizon" in schema["function"]["parameters"]["properties"]

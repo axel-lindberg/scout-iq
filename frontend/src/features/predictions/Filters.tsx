@@ -1,5 +1,5 @@
 import { useId } from "react";
-import { POSITIONS, type FilterValues } from "./filterValues";
+import { HORIZON, POSITIONS, type FilterValues } from "./filterValues";
 
 interface Props {
   values: FilterValues;
@@ -49,6 +49,22 @@ export function Filters({ values, onChange }: Props) {
             set({ maxPrice: e.target.value });
           }}
         />
+      </div>
+      <div className="flex flex-col gap-1">
+        <label htmlFor={`${id}-rank`} className="text-xs font-medium text-muted">
+          Rank by
+        </label>
+        <select
+          id={`${id}-rank`}
+          className="field"
+          value={values.rankBy}
+          onChange={(e) => {
+            set({ rankBy: e.target.value === "horizon" ? "horizon" : "next" });
+          }}
+        >
+          <option value="next">Next GW</option>
+          <option value="horizon">Next {HORIZON} GWs</option>
+        </select>
       </div>
       <div className="flex flex-col gap-1">
         <label htmlFor={`${id}-team`} className="text-xs font-medium text-muted">

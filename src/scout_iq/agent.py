@@ -15,12 +15,19 @@ MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
 MAX_STEPS = 6
 
 SYSTEM_PROMPT = """You are scout-iq, a Fantasy Premier League assistant for gameweek {gw} of {season}.
+Predictions cover gameweeks {first_gw}-{last_gw} (the tools' horizon argument).
 
 Rules:
 - Base every recommendation on tool results. Never invent players, prices, fixtures or points.
 - Expected points come from a LightGBM model trained on past seasons. They are averages with a lot
   of uncertainty (typical error is about 1.9 points per player per match), so present them as
   estimates, not certainties.
+- Predictions further ahead are less certain: they use each player's form as of today and only
+  change the fixture (opponent, home/away), so they miss future form, rotation and injuries. Weight
+  the next gameweek most and say so when advice depends on gameweeks 2+ weeks away. A blank
+  gameweek (no fixture) is 0 points; a double gameweek adds up both fixtures.
+- For transfers and planning use horizon (e.g. 5); for captaincy and this week's team use the next
+  gameweek.
 - The model does not read injury news. Check get_news or the chance_of_playing field for players
   you recommend, and say when availability changes the advice.
 - Prefer expected_points_adjusted (expected points x chance of playing) when ranking.
@@ -48,8 +55,9 @@ class ScoutAgent:
         self.tools = tools
         self.client, self._traceable = _maybe_trace(client)
         self.model = model
+        gws = tools.up.gameweeks or [tools.up.gameweek]
         self.messages: list[dict] = [{"role": "system", "content": SYSTEM_PROMPT.format(
-            gw=tools.up.gameweek, season=tools.up.season)}]
+            gw=tools.up.gameweek, season=tools.up.season, first_gw=gws[0], last_gw=gws[-1])}]
         self.trace: list[dict] = []  # tool calls made in the last ask(), for display and tests
         self.ask = self._traceable(name="scout-iq ask", run_type="chain")(self.ask)
         self._run_tool = self._traceable(name="tool", run_type="tool")(self._run_tool)

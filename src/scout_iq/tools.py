@@ -33,10 +33,22 @@ class ScoutTools:
         self.up = upcoming
         self.news = news
         self.df = upcoming.predictions
+        self.gameweeks = list(upcoming.gameweeks)
+        # element -> [{gameweek, fixtures, xpts...}, ...] in gameweek order
+        self.by_gw: dict[int, list[dict]] = {}
+        for r in upcoming.by_gw.sort_values(["element", "GW"]).itertuples(index=False):
+            self.by_gw.setdefault(int(r.element), []).append({
+                "gameweek": int(r.GW), "fixtures": r.fixtures,
+                "expected_points": round(float(r.xpts), 2),
+                "expected_points_adjusted": round(float(r.xpts_adjusted), 2),
+            })
+
+    def _horizon(self, horizon: int | None) -> int:
+        return max(1, min(int(horizon or 1), len(self.gameweeks)))
 
     # ---- helpers -------------------------------------------------------------
-    def _row(self, r: pd.Series) -> dict:
-        return {
+    def _row(self, r: pd.Series, horizon: int = 1) -> dict:
+        row = {
             "name": r["web_name"], "full_name": r["name"], "team": r["team_short"], "position": r["position"],
             "price": r["price"], "fixtures": r["fixtures"],
             "expected_points": round(float(r["xpts"]), 2),
@@ -44,6 +56,18 @@ class ScoutTools:
             "chance_of_playing": int(r["chance_of_playing"]),
             "status": r["status_text"], "news": r["news"] or None,
         }
+        if horizon > 1:  # only when asked for, so the default response keeps its shape
+            gws = self.player_gameweeks(int(r["element"]), horizon)
+            row["gameweeks"] = gws
+            row["expected_points_horizon_adjusted"] = round(sum(g["expected_points_adjusted"] for g in gws), 2)
+        return row
+
+    def player_gameweeks(self, element: int, horizon: int | None = None) -> list[dict]:
+        """Per-gameweek fixtures and expected points for the first `horizon` gameweeks (0 if blank)."""
+        known = {g["gameweek"]: g for g in self.by_gw.get(element, [])}
+        blank = {"fixtures": "", "expected_points": 0.0, "expected_points_adjusted": 0.0}
+        return [known.get(gw, {"gameweek": gw, **blank})
+                for gw in self.gameweeks[:self._horizon(horizon or len(self.gameweeks))]]
 
     def find_player(self, name: str) -> dict:
         """Resolve a name the user typed to one player.
@@ -84,7 +108,9 @@ class ScoutTools:
 
     # ---- tools ---------------------------------------------------------------
     def get_predictions(self, position: str | None = None, max_price: float | None = None,
-                        team: str | None = None, top_n: int = 10, include_unavailable: bool = False) -> dict:
+                        team: str | None = None, top_n: int = 10, include_unavailable: bool = False,
+                        horizon: int = 1, rank_by: str = "next") -> dict:
+        horizon = self._horizon(horizon)
         d = self.df
         if position:
             d = d[d["position"] == position.upper()]
@@ -95,11 +121,19 @@ class ScoutTools:
             d = d[(d["team_short"].str.lower() == t) | d["team_name"].str.lower().str.contains(t)]
         if not include_unavailable:
             d = d[d["chance_of_playing"] > 0]
-        d = d.sort_values("xpts_adjusted", ascending=False)
-        return {"gameweek": self.up.gameweek, "season": self.up.season,
-                "players": [self._row(r) for _, r in d.head(max(1, min(top_n, 30))).iterrows()]}
+        if horizon > 1 and rank_by == "horizon":
+            totals = {e: sum(g["expected_points_adjusted"] for g in self.player_gameweeks(e, horizon))
+                      for e in d["element"]}
+            d = d.assign(_rank=d["element"].map(totals)).sort_values("_rank", ascending=False, kind="stable")
+        else:
+            d = d.sort_values("xpts_adjusted", ascending=False, kind="stable")
+        res = {"gameweek": self.up.gameweek, "season": self.up.season,
+               "players": [self._row(r, horizon) for _, r in d.head(max(1, min(top_n, 30))).iterrows()]}
+        if horizon > 1:
+            res["gameweeks"] = self.gameweeks[:horizon]
+        return res
 
-    def compare_players(self, names: list[str]) -> dict:
+    def compare_players(self, names: list[str], horizon: int = 1) -> dict:
         out, missing, ambiguous = [], [], {}
         for n in names[:6]:
             hit = self.find_player(n)
@@ -110,7 +144,7 @@ class ScoutTools:
                 missing.append(n)
                 continue
             r = hit["row"]
-            row = self._row(r)
+            row = self._row(r, self._horizon(horizon))
             row["recent_form"] = {
                 "avg_points_last5": None if pd.isna(r["pts_last5"]) else round(float(r["pts_last5"]), 2),
                 "avg_minutes_last3": None if pd.isna(r["mins_last3"]) else round(float(r["mins_last3"]), 1),
@@ -154,6 +188,11 @@ TOOL_SCHEMAS = [
             "team": {"type": "string", "description": "Team name or short name, e.g. 'Arsenal' or 'ARS'"},
             "top_n": {"type": "integer", "description": "How many players to return (default 10, max 30)"},
             "include_unavailable": {"type": "boolean", "description": "Include injured/suspended players"},
+            "horizon": {"type": "integer", "description": (
+                "Gameweeks ahead to include, 1-5 (default 1 = next gameweek only). With more, each "
+                "player gets per-gameweek fixtures and expected points. Use for transfers and planning.")},
+            "rank_by": {"type": "string", "enum": ["next", "horizon"],
+                        "description": "Rank by the next gameweek (default) or the total over the horizon"},
         }},
     }},
     {"type": "function", "function": {
@@ -162,6 +201,7 @@ TOOL_SCHEMAS = [
                         "availability and recent form. Use for transfer and captain choices between players."),
         "parameters": {"type": "object", "properties": {
             "names": {"type": "array", "items": {"type": "string"}, "description": "Player names, 2-6"},
+            "horizon": {"type": "integer", "description": "Gameweeks ahead to include, 1-5 (default 1)"},
         }, "required": ["names"]},
     }},
     {"type": "function", "function": {

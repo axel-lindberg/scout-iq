@@ -44,7 +44,7 @@ describe("predictions table", () => {
     const api = mockApi({ "GET /api/status": status(), "GET /api/predictions": predictions() });
     const { user } = renderApp();
     await screen.findByText("Haaland");
-    expect(api.callsTo("/api/predictions")[0]?.url.searchParams.toString()).toBe("top_n=30");
+    expect(api.callsTo("/api/predictions")[0]?.url.searchParams.toString()).toBe("top_n=30&horizon=5");
 
     await user.selectOptions(screen.getByLabelText("Position"), "DEF");
     await waitFor(() => {
@@ -79,6 +79,37 @@ describe("predictions table", () => {
     await user.type(screen.getByLabelText("Max £m"), "0");
     await new Promise((r) => setTimeout(r, 400));
     expect(api.callsTo("/api/predictions").every((c) => !c.url.searchParams.has("max_price"))).toBe(true);
+  });
+
+  it("shows the next gameweeks, faded further ahead, with blanks and a total", async () => {
+    mockApi({ "GET /api/status": status(), "GET /api/predictions": predictions() });
+    renderApp();
+    const haaland = (await screen.findByText("Haaland")).closest("tr");
+    if (!haaland) throw new Error("no row");
+    const headers = screen.getAllByRole("columnheader").map((h) => h.textContent);
+    expect(headers).toEqual(expect.arrayContaining(["GW12", "GW13", "GW14", "GW15", "5 GWs"]));
+    expect(screen.getByRole("columnheader", { name: "GW15" })).toHaveAttribute("title", expect.stringContaining("less certain"));
+    expect(within(haaland).getByText("6.1")).toBeInTheDocument(); // GW 12: 7.1 - 1
+    expect(within(haaland).getByText("LIV (H)")).toBeInTheDocument();
+    expect(within(haaland).getByText("blank")).toBeInTheDocument(); // GW 13: MCI blank
+    expect(within(haaland).getByText("27.4")).toBeInTheDocument(); // 7.1 + 6.1 + 0 + 7.1 + 7.1
+  });
+
+  it("can rank by the next five gameweeks", async () => {
+    const api = mockApi({ "GET /api/status": status(), "GET /api/predictions": predictions() });
+    const { user } = renderApp();
+    await screen.findByText("Haaland");
+    await user.selectOptions(screen.getByLabelText("Rank by"), "horizon");
+    await waitFor(() => {
+      expect(api.callsTo("/api/predictions").at(-1)?.url.searchParams.get("rank_by")).toBe("horizon");
+    });
+  });
+
+  it("still works when the API sends only the next gameweek", async () => {
+    mockApi({ "GET /api/status": status(), "GET /api/predictions": predictions(PLAYERS, false) });
+    renderApp();
+    await screen.findByText("Haaland");
+    expect(screen.queryByRole("columnheader", { name: "GW12" })).not.toBeInTheDocument();
   });
 
   it("shows an empty state", async () => {
