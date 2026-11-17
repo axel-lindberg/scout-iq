@@ -1,7 +1,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useId, useState } from "react";
 import type { TeamAnalysis } from "../../api/endpoints";
-import { queryKeys, useLoadTeam, useTeamAnalysis } from "../../api/queries";
+import { queryKeys, useLoadTeam } from "../../api/queries";
 import { Card } from "../../components/Card";
 import {
   rememberedTeamId,
@@ -11,11 +11,9 @@ import {
   useSavedTeam,
   type SavedTeam,
 } from "../../lib/teamStore";
-import { Pitch } from "./Pitch";
+import { Planner } from "./Planner";
 import { SquadBuilder } from "./SquadBuilder";
-import { SquadTable } from "./SquadTable";
 import { TeamSettings } from "./TeamSettings";
-import { Transfers } from "./Transfers";
 
 function LoadById({ onLoaded }: { onLoaded: (a: TeamAnalysis) => void }) {
   const id = useId();
@@ -85,98 +83,6 @@ function LoadById({ onLoaded }: { onLoaded: (a: TeamAnalysis) => void }) {
   );
 }
 
-function Limitations({ analysis, team }: { analysis: TeamAnalysis; team: SavedTeam }) {
-  const notes = [...(team.entry?.notes ?? []), ...analysis.warnings];
-  return (
-    <Card aria-labelledby="lim-h" className="text-sm">
-      <h3 id="lim-h" className="heading mb-2 text-lg">
-        What this can't know
-      </h3>
-      {notes.length > 0 && (
-        <ul className="mb-2 space-y-1 rounded-lg bg-warn-soft px-3 py-2">
-          {notes.map((n) => (
-            <li key={n}>{n}</li>
-          ))}
-        </ul>
-      )}
-      <ul className="list-disc space-y-1 pl-5 text-muted">
-        {analysis.limitations.map((l) => (
-          <li key={l}>{l}</li>
-        ))}
-        {team.entry && <li>{team.entry.free_transfers_note}</li>}
-      </ul>
-    </Card>
-  );
-}
-
-function Analysis({ team }: { team: SavedTeam }) {
-  const { data, error, isPending, isFetching, refetch } = useTeamAnalysis(requestFor(team));
-  if (isPending) return <p className="text-sm text-muted">Analysing your squad…</p>;
-  if (error)
-    return (
-      <p role="alert" className="text-sm text-bad">
-        Couldn't analyse the squad: {error.message}{" "}
-        <button type="button" className="btn ml-2 text-ink" onClick={() => void refetch()}>
-          Retry
-        </button>
-      </p>
-    );
-  const gws = data.gameweeks;
-  const weakest = data.weakest.slice(0, 5);
-  return (
-    <div className={`space-y-4 ${isFetching ? "opacity-70 transition-opacity" : "transition-opacity"}`}>
-      <Card aria-labelledby="xi-h">
-        <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
-          <h3 id="xi-h" className="heading text-lg">
-            Best XI · GW{data.lineup.gameweek}
-          </h3>
-          <p className="text-xs text-muted" aria-live="polite">
-            {isFetching ? "Updating…" : ""}
-          </p>
-        </div>
-        <Pitch analysis={data} />
-      </Card>
-
-      <Card aria-labelledby="tr-h">
-        <h3 id="tr-h" className="heading mb-3 text-lg">
-          Transfer suggestions
-        </h3>
-        <Transfers analysis={data} />
-      </Card>
-
-      <Card aria-labelledby="weak-h">
-        <h3 id="weak-h" className="heading mb-2 text-lg">
-          Weakest players
-        </h3>
-        <ul className="space-y-1 text-sm">
-          {weakest.map((w) => (
-            <li key={w.id}>
-              <span className="font-semibold">{w.name}</span>{" "}
-              <span className={w.reason === "low expected points" ? "text-muted" : "text-bad"}>{w.reason}</span>{" "}
-              <span className="font-mono text-[13px] text-muted tabular-nums">
-                {w.expected_points_horizon_adjusted.toFixed(1)} xPts over {gws.length} GWs
-              </span>
-            </li>
-          ))}
-        </ul>
-      </Card>
-
-      <Card aria-labelledby="sq-h">
-        <h3 id="sq-h" className="heading mb-2 text-lg">
-          Expected points, next {gws.length} gameweeks
-        </h3>
-        <SquadTable analysis={data} />
-        <p className="mt-2 text-xs text-muted">
-          Later gameweeks (faded) are less certain: they use each player's form as of today and only change the
-          opponent. A double gameweek adds both fixtures; a blank is 0.
-        </p>
-      </Card>
-
-      <Limitations analysis={data} team={team} />
-    </div>
-  );
-}
-
 /** The My team page body: load or pick a squad, then the analysis. */
 export function MyTeamPanel() {
   const team = useSavedTeam();
@@ -190,6 +96,7 @@ export function MyTeamPanel() {
       bank: a.bank,
       freeTransfers: a.free_transfers,
       entry: a.entry ?? null,
+      plan: null,
     };
     queryClient.setQueryData(queryKeys.team(requestFor(t)), a); // no second request for the same squad
     saveTeam(t);
@@ -197,7 +104,7 @@ export function MyTeamPanel() {
   };
 
   const onBuilt = (ids: number[]) => {
-    saveTeam({ source: "manual", playerIds: ids, bank: team?.bank ?? 0, freeTransfers: team?.freeTransfers ?? 1, entry: null });
+    saveTeam({ source: "manual", playerIds: ids, bank: team?.bank ?? 0, freeTransfers: team?.freeTransfers ?? 1, entry: null, plan: null });
     setBuilding(false);
   };
 
@@ -263,7 +170,7 @@ export function MyTeamPanel() {
           </div>
         )}
       </Card>
-      {team && !building && <Analysis team={team} />}
+      {team && !building && <Planner team={team} />}
     </div>
   );
 }

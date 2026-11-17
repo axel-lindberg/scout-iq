@@ -4,7 +4,7 @@ import { predictions, status } from "../../test/fixtures";
 import { renderApp } from "../../test/render";
 import { playerOptions, SQUAD_IDS, teamAnalysis } from "../../test/teamFixtures";
 
-const base = { "GET /api/status": status(), "GET /api/predictions": predictions() };
+const base = { "GET /api/status": status(), "GET /api/predictions": predictions(), "GET /api/players": playerOptions() };
 
 beforeEach(() => {
   window.localStorage.clear();
@@ -23,7 +23,7 @@ describe("my team page", () => {
     expect(window.localStorage.getItem("scout-iq.teamId")).toBe("1234567");
 
     // Pitch: 11 starters by position, captain and vice marked, bench in order.
-    const pitch = screen.getByRole("figure", { name: "Best XI for gameweek 11" });
+    const pitch = screen.getByRole("figure", { name: "Your team for gameweek 11" });
     expect(within(pitch).getByRole("listitem", { name: "Haaland, captain" })).toBeInTheDocument();
     expect(within(pitch).getByRole("listitem", { name: "Isak, vice-captain" })).toBeInTheDocument();
     const bench = within(pitch).getByRole("list", { name: "Bench" });
@@ -107,7 +107,7 @@ describe("my team page", () => {
   });
 
   it("builds a squad by hand with the rules checked", async () => {
-    const api = mockApi({ ...base, "GET /api/players": playerOptions(), "POST /api/team/analyze": teamAnalysis({ source: "manual", entry: null }) });
+    const api = mockApi({ ...base, "POST /api/team/analyze": teamAnalysis({ source: "manual", entry: null }) });
     const { user } = renderApp("/my-team");
     await user.click(screen.getByRole("button", { name: "Pick your 15 players by hand" }));
     const analyse = screen.getByRole("button", { name: "Analyse squad" });
@@ -171,5 +171,153 @@ describe("my team page", () => {
     expect(screen.getByLabelText("FPL team ID")).toHaveValue("1234567");
     await user.click(screen.getByRole("button", { name: "Forget this team" }));
     expect(screen.queryByText("Sample XI")).not.toBeInTheDocument();
+  });
+
+  describe("planning on the pitch", () => {
+    async function loaded() {
+      const api = mockApi({
+        ...base,
+        "POST /api/team/analyze": teamAnalysis(),
+        "POST /api/chat": { session_id: "s1", answer: "OK.", tools: [] },
+      });
+      const r = renderApp("/my-team");
+      await r.user.type(screen.getByLabelText("FPL team ID"), "1234567");
+      await r.user.click(screen.getByRole("button", { name: "Load team" }));
+      await screen.findByRole("figure", { name: "Your team for gameweek 11" });
+      return { api, ...r };
+    }
+    const points = () => screen.getByTestId("predicted-points").textContent;
+    const stat = (name: string) => screen.getByText(name, { selector: "dt" }).nextElementSibling?.textContent;
+
+    it("sells with ×, buys with +, and counts transfers, bank and points live; buying back is free", async () => {
+      const { user } = await loaded();
+      expect(points()).toBe("54.6"); // 47.5 for the XI + Haaland's 7.1 again
+      expect(stat("Free transfers left")).toBe("2 of 2");
+
+      await user.click(screen.getByRole("button", { name: "Remove Semenyo" }));
+      expect(screen.getByRole("listitem", { name: "Empty MID slot" })).toBeInTheDocument();
+      expect(points()).toBe("50.7"); // an empty slot scores 0
+      const list = screen.getByRole("list", { name: "MIDs to buy" }); // opens straight away
+      expect(within(list).getByRole("button", { name: "Buy Odegaard" })).toHaveTextContent("3 from ARS");
+      expect(within(list).queryByRole("button", { name: "Buy Raya" })).not.toBeInTheDocument(); // wrong position
+
+      await user.click(within(list).getByRole("button", { name: "Buy Mbeumo" })); // 8.0 for 7.5, bank 0.9
+      expect(points()).toBe("56.2");
+      expect(stat("Transfers")).toBe("1");
+      expect(stat("Free transfers left")).toBe("1 of 2");
+      expect(stat("Bank")).toBe("£0.4m");
+      expect(screen.getByText(/Unsaved changes/)).toBeInTheDocument();
+
+      // Changed my mind: Semenyo back. No transfer used, bank as before.
+      await user.click(screen.getByRole("button", { name: "Remove Mbeumo" }));
+      const again = within(screen.getByRole("list", { name: "MIDs to buy" })).getAllByRole("listitem");
+      expect(again[0]).toHaveTextContent(/Semenyo.*sold · buy back for free/); // sold players come first
+      await user.click(
+        within(screen.getByRole("list", { name: "MIDs to buy" })).getByRole("button", { name: "Buy Semenyo" }),
+      );
+      expect(stat("Transfers")).toBe("0");
+      expect(stat("Free transfers left")).toBe("2 of 2");
+      expect(stat("Bank")).toBe("£0.9m");
+      expect(points()).toBe("54.6");
+    });
+
+    it("shows hits beyond the free transfers and blocks buys over budget", async () => {
+      const { user } = await loaded();
+      await user.click(screen.getByRole("button", { name: "Remove Rudoni" })); // 4.5 + 0.9 in the bank
+      expect(
+        within(screen.getByRole("list", { name: "MIDs to buy" })).getByRole("button", { name: "Buy Mbeumo" }),
+      ).toHaveTextContent("£2.6m short");
+      await user.click(screen.getByRole("button", { name: "Buy Cheapo" }));
+      await user.click(screen.getByRole("button", { name: "Remove Konsa" }));
+      await user.click(screen.getByRole("button", { name: "Buy De Cuyper" }));
+      await user.click(screen.getByRole("button", { name: "Remove Semenyo" }));
+      await user.click(screen.getByRole("button", { name: "Buy Doku" }));
+      expect(stat("Transfers")).toBe("3");
+      expect(stat("Free transfers left")).toBe("0 of 2");
+      expect(stat("Hits")).toBe("−4");
+      // 54.6 - Konsa 3.0 + De Cuyper 3.6 - Semenyo 3.9 + Doku 4.4 = 55.7, minus the hit.
+      expect(points()).toBe("51.7");
+    });
+
+    it("substitutes, changes the captain and vice, and Optimise restores the best XI", async () => {
+      const { user } = await loaded();
+      await user.click(screen.getByRole("button", { name: "Select Konsa" }));
+      await user.click(screen.getByRole("button", { name: "Select Dubravka" })); // DEF for GK: not allowed
+      expect(screen.getByRole("alert")).toHaveTextContent("A goalkeeper can only swap with a goalkeeper.");
+      await user.click(screen.getByRole("button", { name: "Select Egan" }));
+      expect(points()).toBe("52.8"); // Konsa 3.0 off, Egan 1.2 on
+      const bench = screen.getByRole("list", { name: "Bench" });
+      expect(
+        within(bench)
+          .getAllByRole("listitem")
+          .map((li) => li.getAttribute("aria-label")),
+      ).toEqual(["Dubravka, bench 1", "Rudoni, bench 2", "Konsa, bench 3", "Thomas, bench 4"]);
+      // Bench order: Thomas before Rudoni.
+      await user.click(screen.getByRole("button", { name: "Select Thomas" }));
+      await user.click(screen.getByRole("button", { name: "Select Rudoni" }));
+      expect(
+        within(bench)
+          .getAllByRole("listitem")
+          .map((li) => li.getAttribute("aria-label"))[1],
+      ).toBe("Thomas, bench 2");
+
+      await user.click(screen.getByRole("button", { name: "Select Palmer" }));
+      await user.click(screen.getByRole("button", { name: "Make captain" }));
+      expect(screen.getByRole("listitem", { name: "Palmer, captain" })).toBeInTheDocument();
+      expect(points()).toBe("50.4"); // 52.8 - 7.1 + 4.7
+      await user.click(screen.getByRole("button", { name: "Select Haaland" }));
+      await user.click(screen.getByRole("button", { name: "Make vice-captain" }));
+      expect(screen.getByRole("listitem", { name: "Haaland, vice-captain" })).toBeInTheDocument();
+      expect(screen.getByRole("listitem", { name: "Isak" })).toBeInTheDocument();
+
+      await user.click(screen.getByRole("button", { name: "Optimise" }));
+      expect(points()).toBe("54.6");
+      expect(screen.getByRole("listitem", { name: "Haaland, captain" })).toBeInTheDocument();
+      expect(screen.queryByText(/Unsaved changes/)).not.toBeInTheDocument();
+    });
+
+    it("saves transfers (the chat and analysis use them) and Reset goes back to the loaded squad", async () => {
+      const { user, api } = await loaded();
+      await user.click(screen.getByRole("button", { name: "Remove Semenyo" }));
+      await user.click(screen.getByRole("button", { name: "Buy Mbeumo" }));
+      const ids = SQUAD_IDS.map((x) => (x === 23 ? 53 : x)).sort((a, b) => a - b);
+      await waitFor(() => {
+        expect(api.callsTo("/api/team/analyze").at(-1)?.body).toEqual({
+          player_ids: ids,
+          bank: 0.4,
+          free_transfers: 1,
+          horizon: 5,
+          include_pairs: true,
+        });
+      });
+      await user.click(screen.getByRole("button", { name: "Save" }));
+      expect(await screen.findByText("Saved, 1 transfer made")).toBeInTheDocument();
+      expect(JSON.parse(window.localStorage.getItem("scout-iq.team") ?? "{}")).toMatchObject({
+        playerIds: SQUAD_IDS,
+        plan: { transfers: 1, bankDelta: -0.5 },
+      });
+      expect(screen.getByText(/with your 1 saved transfer/)).toBeInTheDocument();
+      await user.click(screen.getByRole("button", { name: "Who should I sell this week?" }));
+      await screen.findByText("OK.");
+      const sent = (api.callsTo("/api/chat")[0]?.body as { team: { player_ids: number[] } }).team;
+      expect(sent).toMatchObject({ bank: 0.4, free_transfers: 1 });
+      expect([...sent.player_ids].sort((a, b) => a - b)).toEqual(ids);
+
+      await user.click(screen.getByRole("button", { name: "Reset" }));
+      expect(await screen.findByRole("button", { name: "Select Semenyo" })).toBeInTheDocument();
+      expect(stat("Free transfers left")).toBe("2 of 2");
+      expect(JSON.parse(window.localStorage.getItem("scout-iq.team") ?? "{}")).toMatchObject({ plan: null });
+    });
+
+    it("tries a suggested transfer on the pitch", async () => {
+      const { user } = await loaded();
+      await user.click(
+        await screen.findByRole("button", {
+          name: "Try: Sell Rudoni, buy Barry",
+        }),
+      );
+      expect(screen.getByRole("listitem", { name: "Barry, bench 2" })).toBeInTheDocument();
+      expect(stat("Transfers")).toBe("1");
+    });
   });
 });

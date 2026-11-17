@@ -152,7 +152,9 @@ export function ChatPanel({ suggestions = SUGGESTIONS }: { suggestions?: readonl
       <p className="mt-2 text-xs text-muted">
         {team ? (
           <>
-            Using your team{team.entry ? ` “${team.entry.team_name}”` : ""} for questions about it.{" "}
+            Using your team{team.entry ? ` “${team.entry.team_name}”` : ""}
+            {team.plan?.transfers ? ` with your ${team.plan.transfers} saved transfer${team.plan.transfers > 1 ? "s" : ""}` : ""} for
+            questions about it.{" "}
             <Link to="/my-team" className="underline underline-offset-2">
               Edit
             </Link>
