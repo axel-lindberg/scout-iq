@@ -17,6 +17,7 @@ export type TeamContext = Schemas["TeamContext"];
 export type TeamRequest = Schemas["TeamRequest"];
 export type TeamAnalysis = Schemas["TeamAnalysis"];
 export type SquadPlayer = Schemas["SquadPlayer"];
+export type LineupOut = Schemas["LineupOut"];
 export type SquadPlayerBrief = Schemas["SquadPlayerBrief"];
 export type Transfer = Schemas["TransferOut"];
 export type EntryInfo = Schemas["EntryInfo"];
@@ -55,7 +56,9 @@ export function postChat(body: ChatRequest): Promise<ChatResponse> {
   });
 }
 
-export function getPlayers(signal?: AbortSignal): Promise<{ players: PlayerOption[] }> {
+export type PlayersResponse = Schemas["PlayersResponse"];
+
+export function getPlayers(signal?: AbortSignal): Promise<PlayersResponse> {
   return apiFetch<Schemas["PlayersResponse"]>("/api/players", { signal: signal ?? null });
 }
 

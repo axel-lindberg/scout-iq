@@ -300,10 +300,14 @@ def test_team_analyze_fpl_errors():
 
 def test_players_list_for_manual_picking():
     c, ids, _ = _team_client()
-    players = c.get("/api/players").json()["players"]
+    body = c.get("/api/players").json()
+    players = body["players"]
     assert {p["id"] for p in players} >= set(ids) and players[0]["name"] == "StarFwd"   # 20 pts over 2 GWs
-    assert set(players[0]) == {"id", "name", "full_name", "team", "position", "price", "status",
-                               "expected_points_horizon_adjusted"}
+    assert set(players[0]) == {"id", "name", "full_name", "team", "position", "price", "status", "availability",
+                               "expected_points", "fixtures", "expected_points_horizon_adjusted"}
+    assert body["gameweeks"] == [11, 12]
+    assert players[0]["expected_points"] == [10.0, 10.0] and players[0]["fixtures"] == ["T99 (H)", "T99 (H)"]
+    assert players[0]["availability"] == "fit"
 
 
 def test_chat_passes_the_team_to_the_agent():

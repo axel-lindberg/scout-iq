@@ -343,8 +343,23 @@ export interface components {
         };
         /** PlayerOption */
         PlayerOption: {
+            /**
+             * Availability
+             * @enum {string}
+             */
+            availability: "fit" | "doubtful" | "out";
+            /**
+             * Expected Points
+             * @description Chance-adjusted, one per gameweek in `gameweeks`
+             */
+            expected_points: number[];
             /** Expected Points Horizon Adjusted */
             expected_points_horizon_adjusted: number;
+            /**
+             * Fixtures
+             * @description Per gameweek, e.g. 'ARS (H)'; '' = blank
+             */
+            fixtures: string[];
             /** Full Name */
             full_name: string;
             /** Id */
@@ -362,6 +377,8 @@ export interface components {
         };
         /** PlayersResponse */
         PlayersResponse: {
+            /** Gameweeks */
+            gameweeks: number[];
             /** Players */
             players: components["schemas"]["PlayerOption"][];
         };

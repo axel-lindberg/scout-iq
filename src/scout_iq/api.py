@@ -244,10 +244,14 @@ class PlayerOption(BaseModel):
     position: str
     price: float
     status: str
+    availability: Literal["fit", "doubtful", "out"]
+    expected_points: list[float] = Field(description="Chance-adjusted, one per gameweek in `gameweeks`")
+    fixtures: list[str] = Field(description="Per gameweek, e.g. 'ARS (H)'; '' = blank")
     expected_points_horizon_adjusted: float
 
 
 class PlayersResponse(BaseModel):
+    gameweeks: list[int]
     players: list[PlayerOption]
 
 
@@ -354,7 +358,7 @@ def create_app(upcoming: Upcoming, tools: ScoutTools,
 
     @app.get("/api/players", response_model=PlayersResponse)
     def players():
-        return {"players": tools.player_list()}
+        return {"gameweeks": tools.gameweeks, "players": tools.player_list()}
 
     @app.post("/api/team/analyze", response_model=TeamAnalysis, response_model_by_alias=True)
     def analyze_team(req: TeamRequest):

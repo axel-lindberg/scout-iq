@@ -197,13 +197,16 @@ class ScoutTools:
     def player_list(self) -> list[dict]:
         """Every player, for picking a squad by hand."""
         info = self.pool.info
-        totals = self.pool.xpts.sum(axis=1)
         out = []
         for e, r in info.iterrows():
+            x = self.pool.xpts[self.pool.row[e]]
             out.append({"id": int(e), "name": r["web_name"], "full_name": r["name"], "team": r["team_short"],
                         "position": r["position"], "price": float(r["price"]),
                         "status": r.get("status_text", r.get("status", "")),
-                        "expected_points_horizon_adjusted": round(float(totals[self.pool.row[e]]), 2)})
+                        "availability": team_mod.availability_flag(r),
+                        "expected_points": [round(float(v), 2) for v in x],
+                        "fixtures": [g["fixtures"] for g in self.player_gameweeks(int(e))],
+                        "expected_points_horizon_adjusted": round(float(x.sum()), 2)})
         return sorted(out, key=lambda p: (-p["expected_points_horizon_adjusted"], p["id"]))
 
     def _brief(self, e: int, horizon: int) -> dict:

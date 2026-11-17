@@ -1,4 +1,4 @@
-import type { PlayerOption, SquadPlayer, SquadPlayerBrief, TeamAnalysis, Transfer } from "../api/endpoints";
+import type { PlayersResponse, SquadPlayer, SquadPlayerBrief, TeamAnalysis, Transfer } from "../api/endpoints";
 
 const GWS = [11, 12, 13, 14, 15];
 
@@ -119,23 +119,36 @@ export function teamAnalysis(overrides: Partial<TeamAnalysis> = {}): TeamAnalysi
   };
 }
 
-/** /api/players: the squad plus a few to buy, and three more Arsenal players to break the club limit. */
-export function playerOptions(): { players: PlayerOption[] } {
+/** Players to buy (also in the transfer suggestions). */
+const BUYS: [number, string, string, string, number, number][] = [
+  [50, "Barry", "EVE", "MID", 5.4, 4.6],
+  [51, "Doku", "MCI", "MID", 7.4, 4.4],
+  [52, "De Cuyper", "BHA", "DEF", 4.9, 3.6],
+  [53, "Mbeumo", "MUN", "MID", 8.0, 5.5],
+  [54, "Cheapo", "LEI", "MID", 4.5, 1.0],
+];
+
+/** /api/players: the squad, players to buy, and three more Arsenal players to break the club limit. */
+export function playerOptions(): PlayersResponse {
   const extra: [number, string, string, string, number, number][] = [
     [60, "Saliba", "ARS", "DEF", 6.0, 3.9],
     [61, "Timber", "ARS", "DEF", 5.6, 3.5],
     [62, "Odegaard", "ARS", "MID", 8.0, 3.8],
   ];
   return {
-    players: [...SQUAD, ...extra].map(([id, name, team, position, price, x]) => ({
+    gameweeks: GWS,
+    players: [...SQUAD, ...extra, ...BUYS].map(([id, name, team, position, price, x]) => ({
       id,
       name,
       full_name: `${name} Full`,
       team,
       position,
       price,
-      status: "available",
-      expected_points_horizon_adjusted: x * 5,
+      status: name === "Saka" ? "doubtful" : "available",
+      availability: name === "Saka" ? ("doubtful" as const) : ("fit" as const),
+      expected_points: GWS.map(() => x),
+      fixtures: GWS.map((gw) => (gw === 13 && team === "MCI" ? "" : "TOT (H)")),
+      expected_points_horizon_adjusted: Math.round(x * 5 * 100) / 100,
     })),
   };
 }

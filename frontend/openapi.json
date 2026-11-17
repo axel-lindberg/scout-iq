@@ -581,9 +581,34 @@
       },
       "PlayerOption": {
         "properties": {
+          "availability": {
+            "enum": [
+              "fit",
+              "doubtful",
+              "out"
+            ],
+            "title": "Availability",
+            "type": "string"
+          },
+          "expected_points": {
+            "description": "Chance-adjusted, one per gameweek in `gameweeks`",
+            "items": {
+              "type": "number"
+            },
+            "title": "Expected Points",
+            "type": "array"
+          },
           "expected_points_horizon_adjusted": {
             "title": "Expected Points Horizon Adjusted",
             "type": "number"
+          },
+          "fixtures": {
+            "description": "Per gameweek, e.g. 'ARS (H)'; '' = blank",
+            "items": {
+              "type": "string"
+            },
+            "title": "Fixtures",
+            "type": "array"
           },
           "full_name": {
             "title": "Full Name",
@@ -622,6 +647,9 @@
           "position",
           "price",
           "status",
+          "availability",
+          "expected_points",
+          "fixtures",
           "expected_points_horizon_adjusted"
         ],
         "title": "PlayerOption",
@@ -629,6 +657,13 @@
       },
       "PlayersResponse": {
         "properties": {
+          "gameweeks": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Gameweeks",
+            "type": "array"
+          },
           "players": {
             "items": {
               "$ref": "#/components/schemas/PlayerOption"
@@ -638,6 +673,7 @@
           }
         },
         "required": [
+          "gameweeks",
           "players"
         ],
         "title": "PlayersResponse",
