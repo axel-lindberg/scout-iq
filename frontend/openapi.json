@@ -1,0 +1,776 @@
+{
+  "components": {
+    "schemas": {
+      "ChatRequest": {
+        "properties": {
+          "message": {
+            "maxLength": 1000,
+            "minLength": 1,
+            "title": "Message",
+            "type": "string"
+          },
+          "session_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Id"
+          }
+        },
+        "required": [
+          "message"
+        ],
+        "title": "ChatRequest",
+        "type": "object"
+      },
+      "ChatResponse": {
+        "properties": {
+          "answer": {
+            "title": "Answer",
+            "type": "string"
+          },
+          "session_id": {
+            "title": "Session Id",
+            "type": "string"
+          },
+          "tools": {
+            "items": {
+              "$ref": "#/components/schemas/ToolCall"
+            },
+            "title": "Tools",
+            "type": "array"
+          }
+        },
+        "required": [
+          "session_id",
+          "answer",
+          "tools"
+        ],
+        "title": "ChatResponse",
+        "type": "object"
+      },
+      "CompareResponse": {
+        "properties": {
+          "ambiguous": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Names that match several players -> up to 5 candidates each. Absent if none.",
+            "title": "Ambiguous"
+          },
+          "gameweek": {
+            "title": "Gameweek",
+            "type": "integer"
+          },
+          "not_found": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Names that match no player. Absent if none.",
+            "title": "Not Found"
+          },
+          "players": {
+            "items": {
+              "$ref": "#/components/schemas/ComparedPlayer"
+            },
+            "title": "Players",
+            "type": "array"
+          }
+        },
+        "required": [
+          "gameweek",
+          "players"
+        ],
+        "title": "CompareResponse",
+        "type": "object"
+      },
+      "ComparedPlayer": {
+        "properties": {
+          "chance_of_playing": {
+            "title": "Chance Of Playing",
+            "type": "integer"
+          },
+          "expected_points": {
+            "title": "Expected Points",
+            "type": "number"
+          },
+          "expected_points_adjusted": {
+            "description": "expected_points x chance of playing",
+            "title": "Expected Points Adjusted",
+            "type": "number"
+          },
+          "fixtures": {
+            "title": "Fixtures",
+            "type": "string"
+          },
+          "full_name": {
+            "title": "Full Name",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "news": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "News"
+          },
+          "position": {
+            "title": "Position",
+            "type": "string"
+          },
+          "price": {
+            "title": "Price",
+            "type": "number"
+          },
+          "recent_form": {
+            "$ref": "#/components/schemas/RecentForm"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "team": {
+            "title": "Team",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "full_name",
+          "team",
+          "position",
+          "price",
+          "fixtures",
+          "expected_points",
+          "expected_points_adjusted",
+          "chance_of_playing",
+          "status",
+          "news",
+          "recent_form"
+        ],
+        "title": "ComparedPlayer",
+        "type": "object"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "ModelCard": {
+        "description": "Headline evaluation numbers; empty ({}) until scripts/train_evaluate.py has been run.",
+        "properties": {
+          "captain_points_per_gw": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "number"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Captain Points Per Gw"
+          },
+          "evaluation": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evaluation"
+          },
+          "mae": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "number"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "MAE per method, e.g. 'LightGBM'",
+            "title": "Mae"
+          },
+          "test_season": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Test Season"
+          }
+        },
+        "title": "ModelCard",
+        "type": "object"
+      },
+      "Player": {
+        "properties": {
+          "chance_of_playing": {
+            "title": "Chance Of Playing",
+            "type": "integer"
+          },
+          "expected_points": {
+            "title": "Expected Points",
+            "type": "number"
+          },
+          "expected_points_adjusted": {
+            "description": "expected_points x chance of playing",
+            "title": "Expected Points Adjusted",
+            "type": "number"
+          },
+          "fixtures": {
+            "title": "Fixtures",
+            "type": "string"
+          },
+          "full_name": {
+            "title": "Full Name",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "news": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "News"
+          },
+          "position": {
+            "title": "Position",
+            "type": "string"
+          },
+          "price": {
+            "title": "Price",
+            "type": "number"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "team": {
+            "title": "Team",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "full_name",
+          "team",
+          "position",
+          "price",
+          "fixtures",
+          "expected_points",
+          "expected_points_adjusted",
+          "chance_of_playing",
+          "status",
+          "news"
+        ],
+        "title": "Player",
+        "type": "object"
+      },
+      "PredictionsResponse": {
+        "properties": {
+          "gameweek": {
+            "title": "Gameweek",
+            "type": "integer"
+          },
+          "players": {
+            "items": {
+              "$ref": "#/components/schemas/Player"
+            },
+            "title": "Players",
+            "type": "array"
+          },
+          "season": {
+            "title": "Season",
+            "type": "string"
+          }
+        },
+        "required": [
+          "gameweek",
+          "season",
+          "players"
+        ],
+        "title": "PredictionsResponse",
+        "type": "object"
+      },
+      "RecentForm": {
+        "properties": {
+          "avg_minutes_last3": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avg Minutes Last3"
+          },
+          "avg_points_last5": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avg Points Last5"
+          },
+          "avg_xgi_last5": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avg Xgi Last5"
+          },
+          "matches_played": {
+            "title": "Matches Played",
+            "type": "integer"
+          },
+          "season_avg_points": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Season Avg Points"
+          }
+        },
+        "required": [
+          "avg_points_last5",
+          "avg_minutes_last3",
+          "avg_xgi_last5",
+          "season_avg_points",
+          "matches_played"
+        ],
+        "title": "RecentForm",
+        "type": "object"
+      },
+      "StatusResponse": {
+        "properties": {
+          "chat_available": {
+            "title": "Chat Available",
+            "type": "boolean"
+          },
+          "data_through_gw": {
+            "description": "Latest gameweek with results in the data",
+            "title": "Data Through Gw",
+            "type": "integer"
+          },
+          "first_kickoff": {
+            "description": "ISO 8601 timestamp of the gameweek's first kickoff",
+            "title": "First Kickoff",
+            "type": "string"
+          },
+          "gameweek": {
+            "title": "Gameweek",
+            "type": "integer"
+          },
+          "model_card": {
+            "$ref": "#/components/schemas/ModelCard"
+          },
+          "news_available": {
+            "title": "News Available",
+            "type": "boolean"
+          },
+          "season": {
+            "title": "Season",
+            "type": "string"
+          }
+        },
+        "required": [
+          "season",
+          "gameweek",
+          "first_kickoff",
+          "data_through_gw",
+          "chat_available",
+          "news_available",
+          "model_card"
+        ],
+        "title": "StatusResponse",
+        "type": "object"
+      },
+      "ToolCall": {
+        "properties": {
+          "args": {
+            "description": "Arguments the agent passed (normally an object)",
+            "title": "Args"
+          },
+          "tool": {
+            "title": "Tool",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tool",
+          "args"
+        ],
+        "title": "ToolCall",
+        "type": "object"
+      },
+      "ValidationError": {
+        "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "title": "scout-iq",
+    "version": "1.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/api/chat": {
+      "post": {
+        "operationId": "chat_api_chat_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChatRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Chat"
+      }
+    },
+    "/api/compare": {
+      "get": {
+        "operationId": "compare_api_compare_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "names",
+            "required": true,
+            "schema": {
+              "items": {
+                "type": "string"
+              },
+              "maxItems": 6,
+              "minItems": 1,
+              "title": "Names",
+              "type": "array"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompareResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Compare"
+      }
+    },
+    "/api/news": {
+      "get": {
+        "operationId": "news_api_news_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "q",
+            "required": true,
+            "schema": {
+              "minLength": 2,
+              "title": "Q",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "top_k",
+            "required": false,
+            "schema": {
+              "default": 5,
+              "maximum": 10,
+              "minimum": 1,
+              "title": "Top K",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "News"
+      }
+    },
+    "/api/predictions": {
+      "get": {
+        "operationId": "predictions_api_predictions_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "position",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Position"
+            }
+          },
+          {
+            "in": "query",
+            "name": "max_price",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "exclusiveMinimum": 0,
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Max Price"
+            }
+          },
+          {
+            "in": "query",
+            "name": "team",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Team"
+            }
+          },
+          {
+            "in": "query",
+            "name": "top_n",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 30,
+              "minimum": 1,
+              "title": "Top N",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "include_unavailable",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Include Unavailable",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PredictionsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Predictions"
+      }
+    },
+    "/api/status": {
+      "get": {
+        "operationId": "status_api_status_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatusResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Status"
+      }
+    }
+  }
+}

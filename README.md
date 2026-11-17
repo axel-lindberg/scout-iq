@@ -1,6 +1,6 @@
 # scout-iq
 
-**An FPL (Fantasy Premier League) scout.** A LightGBM model predicts how many points every player will score in the next gameweek, and an LLM agent answers questions like *"who should I captain?"* using those predictions and the latest official injury news. It comes with a small web app.
+**An FPL (Fantasy Premier League) scout.** A LightGBM model predicts how many points every player will score in the next gameweek, and an LLM agent answers questions like *"who should I captain?"* using those predictions and the latest official injury news. It comes with a React + TypeScript web app.
 
 ![scout-iq web app](docs/screenshot.png)
 
@@ -36,7 +36,7 @@ flowchart LR
     D --> T[Tools]
     E --> T
     T <--> G[GPT agent<br/>tool calling]
-    G --> W[FastAPI + web UI]
+    G --> W[FastAPI + React app]
     D --> W
 ```
 
@@ -56,7 +56,14 @@ flowchart LR
 
 Predictions for an unplayed gameweek reuse the same pipeline: append a "not yet played" row per player and fixture, and the shifted features become exactly the history up to now. The model doesn't read news, so predictions are also scaled by FPL's chance-of-playing figure. The system prompt requires every claim to come from tool results and tells the agent the model's typical error so it presents predictions as estimates. Optional **LangSmith** tracing shows every model and tool call.
 
-**5. App.** FastAPI backend (`/api/predictions`, `/api/compare`, `/api/news`, `/api/chat` with per-session memory) and a one-page UI. Interactive API docs are at `/docs`.
+**5. App.** A FastAPI backend (`/api/status`, `/api/predictions`, `/api/compare`, `/api/news`, `/api/chat` with per-session memory; interactive docs at `/docs`) and a **React + TypeScript** frontend in `frontend/`, built with Vite:
+
+- **Predictions table** with position, price and team filters (typed filters are debounced), an expected-points bar and an availability badge whose tooltip shows the official injury news.
+- **Compare** 2-4 players side by side: expected points, recent form, minutes, xGI, season average and availability. Names the backend can't resolve are shown as *ambiguous* (with the candidates) or *not found* instead of silently disappearing.
+- **Chat** with the agent, which keeps the session id so it remembers the conversation and shows the tools it called (name and arguments) under each answer.
+- Light and dark mode from the system setting, works down to phone width, fully keyboard usable, respects reduced motion.
+
+All API calls go through **TanStack Query** (loading, error and caching states). The response **types are generated from FastAPI's OpenAPI schema** with `openapi-typescript`: the routes declare Pydantic response models, `scripts/export_openapi.py` writes the schema to `frontend/openapi.json`, and `npm run gen:api` regenerates `src/api/schema.gen.ts`. A backend test fails if the committed schema is out of date, so the backend and frontend can't silently drift apart. Styling is Tailwind CSS; tests use Vitest and React Testing Library against a mocked API. In production FastAPI serves the built app from `frontend/dist/` and returns `index.html` for client-side routes, so new pages only need a route in `frontend/src/app/routes.tsx`.
 
 ## Things that went wrong, and what I learned
 
@@ -84,9 +91,40 @@ python scripts/evaluate_baseline.py  # -> results/day1_baseline.md
 python scripts/train_evaluate.py     # -> results/day2_model.md, models/lgbm.txt (~1 min)
 python scripts/train_evaluate.py --ownership prev --experiment own_prev  # ablation run: writes to results/experiments/, leaves the deployed model alone
 
+cd frontend && npm ci && npm run build && cd ..   # build the web app once (needs Node, see below)
 python scripts/serve.py              # web app at http://localhost:8000 (startup ~1 min)
 python scripts/ask.py                # or chat in the terminal
-pytest                               # 27 tests, no API key or network needed
+pytest                               # 35 tests, no API key or network needed
+```
+
+### Web app
+
+The frontend needs **Node.js 20.19+ or 22.12+** (Node 24 LTS recommended; `frontend/.nvmrc` says 24). On WSL/Linux, with [nvm](https://github.com/nvm-sh/nvm):
+
+```bash
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash   # then open a new terminal
+nvm install 24 && nvm use 24
+```
+
+**Development** (hot reload), two terminals:
+
+```bash
+python scripts/serve.py              # terminal 1: the API on :8000
+cd frontend && npm run dev           # terminal 2: open http://localhost:5173
+```
+
+Vite forwards `/api` requests to `http://127.0.0.1:8000`, so the browser sees one origin and no CORS setup is needed. API docs stay at http://localhost:8000/docs.
+
+**Production**: `npm run build` in `frontend/` writes `frontend/dist/`, and `python scripts/serve.py` serves it together with the API at http://localhost:8000. If `frontend/dist/` is missing, `serve.py` says how to build it and the API still works.
+
+Frontend scripts (in `frontend/`):
+
+```bash
+npm run typecheck                    # tsc, strict mode
+npm run lint                         # ESLint (typescript-eslint, react-hooks, jsx-a11y)
+npm run test                         # Vitest + React Testing Library, mocked API
+npm run build                        # type-check, then build to frontend/dist/
+npm run gen:api                      # after changing an API response: refresh openapi.json + TS types
 ```
 
 ## Weekly update
@@ -113,11 +151,17 @@ src/scout_iq/upcoming.py     predictions for the next (unplayed) gameweek
 src/scout_iq/news.py         RAG over injury news (OpenAI embeddings, cosine similarity)
 src/scout_iq/tools.py        the agent's tools + JSON schemas, strict name matching
 src/scout_iq/agent.py        tool-calling loop, system prompt, LangSmith tracing
-src/scout_iq/api.py          FastAPI backend
-src/scout_iq/static/         web UI
+src/scout_iq/api.py          FastAPI backend: routes, response models, serves frontend/dist/
+frontend/                    React + TypeScript web app (Vite)
+  src/api/                   fetch client, TanStack Query hooks, generated OpenAPI types
+  src/app/                   routes and page layout (add new pages in routes.tsx)
+  src/features/              predictions, compare, chat, status header and model card
+  src/components/, src/lib/  shared UI (badge, tooltip, card) and helpers
+  openapi.json               API schema snapshot the types are generated from
 scripts/                     download, build, evaluate, train, serve, ask, weekly update, API-vs-vaastav check,
-                             ownership-experiment comparison
-tests/                       leakage tests; agent, tools, retrieval and API tests with fake OpenAI clients;
+                             ownership-experiment comparison, OpenAPI export
+tests/                       leakage tests; agent, tools, retrieval and API tests with fake OpenAI clients
+                             (incl. frontend serving and the OpenAPI snapshot);
                              FPL API mapping tests on saved responses (tests/fixtures/)
 results/                     evaluation tables and plots; experiments/ holds the ownership ablation runs
 models/                      trained model + metadata
