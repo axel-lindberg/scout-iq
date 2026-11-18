@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import uuid
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Literal
 
 import pandas as pd
 from fastapi import FastAPI, HTTPException, Query, Request
@@ -19,9 +19,10 @@ from fastapi.responses import FileResponse, HTMLResponse, Response
 from pydantic import BaseModel, Field
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from . import fpl_api
 from .data import ROOT
-from .tools import ScoutTools
-from .upcoming import Upcoming
+from .tools import ScoutTools, TeamError
+from .upcoming import HORIZON, Upcoming
 
 FRONTEND_DIST = ROOT / "frontend" / "dist"   # built by `npm run build` in frontend/
 MAX_SESSIONS = 200
@@ -58,9 +59,17 @@ class StatusResponse(BaseModel):
     gameweek: int
     first_kickoff: str = Field(description="ISO 8601 timestamp of the gameweek's first kickoff")
     data_through_gw: int = Field(description="Latest gameweek with results in the data")
+    horizon_gameweeks: list[int] = Field(description="Gameweeks with predictions, the next one first")
     chat_available: bool
     news_available: bool
     model_card: ModelCard
+
+
+class GameweekPrediction(BaseModel):
+    gameweek: int
+    fixtures: str = Field(description="e.g. 'ARS (H)', 'ARS (H), CHE (A)' in a double gameweek, '' if blank")
+    expected_points: float
+    expected_points_adjusted: float
 
 
 class Player(BaseModel):
@@ -75,12 +84,17 @@ class Player(BaseModel):
     chance_of_playing: int
     status: str
     news: str | None
+    gameweeks: list[GameweekPrediction] | None = Field(
+        None, description="Per-gameweek predictions, only when horizon > 1. Later ones are less certain.")
+    expected_points_horizon_adjusted: float | None = Field(
+        None, description="Sum of expected_points_adjusted over the horizon, only when horizon > 1")
 
 
 class PredictionsResponse(BaseModel):
     gameweek: int
     season: str
     players: list[Player]
+    gameweeks: list[int] | None = Field(None, description="The horizon's gameweeks, only when horizon > 1")
 
 
 class RecentForm(BaseModel):
@@ -108,15 +122,133 @@ class ToolCall(BaseModel):
     args: Any = Field(description="Arguments the agent passed (normally an object)")
 
 
+class TeamContext(BaseModel):
+    """The user's squad, sent with chat messages so the agent can analyse it."""
+    player_ids: list[int] = Field(min_length=15, max_length=15)
+    bank: float = Field(0.0, ge=0, le=100, description="£m")
+    free_transfers: int = Field(1, ge=0, le=5)
+    team_name: str | None = Field(None, max_length=60)
+
+
 class ChatRequest(BaseModel):
     message: str = Field(min_length=1, max_length=1000)
     session_id: str | None = None
+    team: TeamContext | None = Field(None, description="The user's squad from the My team page, if loaded")
 
 
 class ChatResponse(BaseModel):
     session_id: str
     answer: str
     tools: list[ToolCall]
+
+
+# ---- my team -----------------------------------------------------------------------
+
+class SquadPlayerBrief(BaseModel):
+    id: int
+    name: str
+    team: str
+    position: str
+    price: float = Field(description="Today's price in £m (selling prices aren't public)")
+    availability: Literal["fit", "doubtful", "out"]
+    news: str | None
+    expected_points: list[float] = Field(description="Per horizon gameweek, chance-of-playing adjusted")
+    expected_points_horizon_adjusted: float
+
+
+class SquadPlayer(SquadPlayerBrief):
+    full_name: str
+    chance_of_playing: int
+    status: str
+    gameweeks: list[GameweekPrediction]
+    in_xi: bool
+    bench_order: int | None = Field(description="1 = first on the bench (the reserve GK), None if starting")
+    is_captain: bool
+    is_vice_captain: bool
+
+
+class LineupOut(BaseModel):
+    gameweek: int
+    formation: str = Field(description="DEF-MID-FWD, e.g. '4-4-2'")
+    starters: list[int]
+    bench: list[int] = Field(description="In order: reserve GK first, then outfield by expected points")
+    captain: int
+    vice_captain: int
+    expected_points: float = Field(description="XI total with the captain counted twice")
+
+
+class WeakPlayer(BaseModel):
+    id: int
+    name: str
+    reason: Literal["unavailable", "doubtful", "low expected points"]
+    expected_points_horizon_adjusted: float
+
+
+class TransferOut(BaseModel):
+    out: list[SquadPlayerBrief]
+    in_: list[SquadPlayerBrief] = Field(alias="in")
+    gain_per_gameweek: list[float]
+    gain: float = Field(description="Expected points gained over the horizon, before hits")
+    hits: int = Field(description="Points deducted: 4 per transfer beyond the free ones")
+    net_gain: float
+    bank_after: float
+
+
+class EntryInfo(BaseModel):
+    team_id: int
+    team_name: str
+    overall_rank: int | None
+    picks_gameweek: int
+    captain: int | None
+    vice_captain: int | None
+    bank: float
+    squad_value: float
+    free_transfers: int = Field(description="Estimate for the next gameweek")
+    free_transfers_note: str
+    active_chip: str | None
+    chips_used: list[dict[str, Any]]
+    notes: list[str]
+
+
+class TeamAnalysis(BaseModel):
+    source: Literal["fpl", "manual"]
+    entry: EntryInfo | None = Field(None, description="The FPL team, when loaded by team ID")
+    player_ids: list[int]
+    gameweeks: list[int]
+    bank: float
+    free_transfers: int
+    squad: list[SquadPlayer] = Field(description="Starters (GK, DEF, MID, FWD) then the bench in order")
+    lineup: LineupOut
+    squad_expected_points: list[float] = Field(description="Best XI + captain, per gameweek")
+    weakest: list[WeakPlayer]
+    transfers: list[TransferOut]
+    transfer_pairs: list[TransferOut]
+    warnings: list[str]
+    limitations: list[str]
+
+
+class TeamRequest(BaseModel):
+    team_id: int | None = Field(None, ge=1, description="FPL team ID (the number in your Points page URL)")
+    player_ids: list[int] | None = Field(None, description="15 player ids, instead of team_id")
+    bank: float | None = Field(None, ge=0, le=100, description="£m; default: from FPL, or 0")
+    free_transfers: int | None = Field(None, ge=0, le=5, description="Default: estimated from FPL, or 1")
+    horizon: int = Field(HORIZON, ge=1, le=HORIZON)
+    include_pairs: bool = True
+
+
+class PlayerOption(BaseModel):
+    id: int
+    name: str
+    full_name: str
+    team: str
+    position: str
+    price: float
+    status: str
+    expected_points_horizon_adjusted: float
+
+
+class PlayersResponse(BaseModel):
+    players: list[PlayerOption]
 
 
 def _model_card() -> dict:
@@ -153,7 +285,9 @@ def _frontend_file(dist: Path, path: str) -> Response:
 
 def create_app(upcoming: Upcoming, tools: ScoutTools,
                agent_factory: Callable[[], object] | None,
-               frontend_dist: Path = FRONTEND_DIST) -> FastAPI:
+               frontend_dist: Path = FRONTEND_DIST,
+               fpl_client: object | None = None) -> FastAPI:
+    """fpl_client: anything with .get(path) -> JSON (default: the real FPL API), for loading teams."""
     app = FastAPI(title="scout-iq", version="1.0")
     sessions: dict[str, object] = {}
     card = _model_card()
@@ -178,18 +312,22 @@ def create_app(upcoming: Upcoming, tools: ScoutTools,
         return {"season": upcoming.season, "gameweek": upcoming.gameweek,
                 "first_kickoff": upcoming.deadline.isoformat(),
                 "data_through_gw": upcoming.last_played_gw,
+                "horizon_gameweeks": list(upcoming.gameweeks),
                 "chat_available": agent_factory is not None,
                 "news_available": tools.news is not None, "model_card": card}
 
     @app.get("/api/predictions", response_model=PredictionsResponse, response_model_exclude_unset=True)
     def predictions(position: str | None = None, max_price: float | None = Query(None, gt=0),
                     team: str | None = None, top_n: int = Query(20, ge=1, le=30),
-                    include_unavailable: bool = False):
-        return tools.get_predictions(position, max_price, team, top_n, include_unavailable)
+                    include_unavailable: bool = False,
+                    horizon: int = Query(1, ge=1, le=HORIZON, description="Gameweeks ahead (1 = next only)"),
+                    rank_by: Literal["next", "horizon"] = "next"):
+        return tools.get_predictions(position, max_price, team, top_n, include_unavailable, horizon, rank_by)
 
     @app.get("/api/compare", response_model=CompareResponse, response_model_exclude_unset=True)
-    def compare(names: list[str] = Query(..., min_length=1, max_length=6)):
-        return tools.compare_players(names)
+    def compare(names: list[str] = Query(..., min_length=1, max_length=6),
+                horizon: int = Query(1, ge=1, le=HORIZON)):
+        return tools.compare_players(names, horizon)
 
     @app.get("/api/news")
     def news(q: str = Query(..., min_length=2), top_k: int = Query(5, ge=1, le=10)):
@@ -207,11 +345,45 @@ def create_app(upcoming: Upcoming, tools: ScoutTools,
                 sessions.pop(next(iter(sessions)))
             sessions[sid] = agent_factory()
         agent = sessions[sid]
+        team = req.team.model_dump() if req.team else None
         try:
-            answer = agent.ask(req.message)
+            answer = agent.ask(req.message, team=team)
         except Exception as e:                          # OpenAI down, bad key, rate limit...
             raise HTTPException(502, f"The language model call failed: {type(e).__name__}") from e
         return ChatResponse(session_id=sid, answer=answer, tools=agent.trace)
+
+    @app.get("/api/players", response_model=PlayersResponse)
+    def players():
+        return {"players": tools.player_list()}
+
+    @app.post("/api/team/analyze", response_model=TeamAnalysis, response_model_by_alias=True)
+    def analyze_team(req: TeamRequest):
+        if (req.team_id is None) == (req.player_ids is None):
+            raise HTTPException(422, "Send either team_id or player_ids.")
+        entry = None
+        if req.team_id is not None:
+            client = fpl_client or fpl_api.FplClient(retries=2)
+            try:
+                entry = fpl_api.fetch_entry_team(client, req.team_id)
+            except fpl_api.EntryNotFound as e:
+                raise HTTPException(404, str(e)) from e
+            except Exception as e:  # FPL down, rate limited, offline...
+                raise HTTPException(502, f"Couldn't load the team from the FPL API ({type(e).__name__}). "
+                                         "Try again, or pick your squad by hand.") from e
+            ids = entry.player_ids
+            bank = entry.bank if req.bank is None else req.bank
+            ft = entry.free_transfers if req.free_transfers is None else req.free_transfers
+        else:
+            ids = req.player_ids
+            bank = 0.0 if req.bank is None else req.bank
+            ft = 1 if req.free_transfers is None else req.free_transfers
+        try:
+            res = tools.analyze_team(ids, bank, ft, horizon=req.horizon, include_pairs=req.include_pairs,
+                                     allow_club_overflow=entry is not None)
+        except TeamError as e:
+            raise HTTPException(422, "Invalid squad: " + " ".join(e.errors)) from e
+        return {"source": "fpl" if entry else "manual",
+                "entry": vars(entry) if entry else None, "player_ids": ids, **res}
 
     return app
 

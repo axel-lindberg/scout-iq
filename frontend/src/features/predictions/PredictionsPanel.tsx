@@ -4,17 +4,18 @@ import { Card } from "../../components/Card";
 import { useDebouncedValue } from "../../lib/useDebouncedValue";
 import { ComparePanel } from "../compare/ComparePanel";
 import { Filters } from "./Filters";
-import { toQuery, type FilterValues } from "./filterValues";
+import { HORIZON, toQuery, type FilterValues } from "./filterValues";
+import { aheadOpacity } from "../../lib/format";
 import { PredictionsTable } from "./PredictionsTable";
 
 const MAX_COMPARE = 4;
 const DEBOUNCE_MS = 300;
 
-function MessageRow({ children, alert = false }: { children: React.ReactNode; alert?: boolean }) {
+function MessageRow({ children, alert = false, cols }: { children: React.ReactNode; alert?: boolean; cols: number }) {
   return (
     <tbody>
       <tr>
-        <td colSpan={7} className={`px-2 py-6 text-center text-sm ${alert ? "text-bad" : "text-muted"}`}>
+        <td colSpan={cols} className={`px-2 py-6 text-center text-sm ${alert ? "text-bad" : "text-muted"}`}>
           {alert ? <span role="alert">{children}</span> : children}
         </td>
       </tr>
@@ -23,16 +24,19 @@ function MessageRow({ children, alert = false }: { children: React.ReactNode; al
 }
 
 export function PredictionsPanel() {
-  const [filters, setFilters] = useState<FilterValues>({ position: "", maxPrice: "", team: "" });
+  const [filters, setFilters] = useState<FilterValues>({ position: "", maxPrice: "", team: "", rankBy: "next" });
   // Position applies at once; typed fields wait until the user pauses.
   const debouncedPrice = useDebouncedValue(filters.maxPrice, DEBOUNCE_MS);
   const debouncedTeam = useDebouncedValue(filters.team, DEBOUNCE_MS);
-  const query = toQuery({ position: filters.position, maxPrice: debouncedPrice, team: debouncedTeam });
+  const query = toQuery({ ...filters, maxPrice: debouncedPrice, team: debouncedTeam });
   const { data, error, isPending, isPlaceholderData, isFetching, refetch } = usePredictions(query);
 
   const [selected, setSelected] = useState<string[]>([]);
   const [comparing, setComparing] = useState<string[] | null>(null);
   const compareButton = useRef<HTMLButtonElement>(null);
+  // Later gameweeks (after the next one) get their own columns once the API has sent them.
+  const later = data?.gameweeks?.slice(1) ?? [];
+  const cols = 7 + (later.length > 0 ? later.length + 1 : 0);
 
   const toggle = (fullName: string, checked: boolean) => {
     setSelected((s) =>
@@ -90,9 +94,10 @@ export function PredictionsPanel() {
       {comparing && <ComparePanel names={comparing} onClose={closeCompare} />}
 
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[560px] border-collapse text-sm [&_td]:border-b [&_td]:border-line">
+        <table className={`w-full ${later.length > 0 ? "min-w-[900px]" : "min-w-[560px]"} border-collapse text-sm [&_td]:border-b [&_td]:border-line`}>
           <caption className="sr-only">
-            Players ranked by expected points for the gameweek. Select 2 to {MAX_COMPARE} players to compare them.
+            Players ranked by expected points{" "}
+            {filters.rankBy === "horizon" ? `over the next ${HORIZON} gameweeks` : "for the next gameweek"}. Select 2 to {MAX_COMPARE} players to compare them.
           </caption>
           <thead>
             <tr className="text-left text-xs tracking-[0.04em] text-muted uppercase [&_th]:border-b [&_th]:border-line [&_th]:px-2 [&_th]:py-1.5 [&_th]:font-semibold">
@@ -110,23 +115,40 @@ export function PredictionsPanel() {
               <th scope="col" className="text-right">
                 xPts
               </th>
+              {later.map((gw, i) => (
+                <th
+                  key={gw}
+                  scope="col"
+                  className="text-right"
+                  style={{ opacity: aheadOpacity(i + 1) }}
+                  title={`${i + 1} gameweek${i ? "s" : ""} after the next: less certain`}
+                >
+                  GW{gw}
+                </th>
+              ))}
+              {later.length > 0 && (
+                <th scope="col" className="text-right">
+                  {later.length + 1} GWs
+                </th>
+              )}
               <th scope="col">Availability</th>
             </tr>
           </thead>
           {isPending ? (
-            <MessageRow>Loading predictions…</MessageRow>
+            <MessageRow cols={cols}>Loading predictions…</MessageRow>
           ) : error ? (
-            <MessageRow alert>
+            <MessageRow alert cols={cols}>
               Couldn't load predictions: {error.message}{" "}
               <button type="button" className="btn ml-2 text-ink" onClick={() => void refetch()}>
                 Retry
               </button>
             </MessageRow>
           ) : data.players.length === 0 ? (
-            <MessageRow>No players match these filters.</MessageRow>
+            <MessageRow cols={cols}>No players match these filters.</MessageRow>
           ) : (
             <PredictionsTable
               players={data.players}
+              laterGameweeks={later}
               selected={selected}
               selectionFull={selected.length >= MAX_COMPARE}
               onToggle={toggle}
@@ -137,7 +159,8 @@ export function PredictionsPanel() {
       </div>
       <p className="mt-3 text-xs text-muted">
         xPts = model expected points for the gameweek × chance of playing. Typical error is about 1.9 points per player
-        per match, so treat small differences as ties.
+        per match, so treat small differences as ties. Later gameweeks (faded) are less certain: they use each player's
+        form as of today and only change the opponent and venue. A double gameweek adds both fixtures; a blank is 0.
       </p>
     </Card>
   );

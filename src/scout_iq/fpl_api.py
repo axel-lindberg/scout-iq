@@ -282,3 +282,101 @@ def write_season(client: FplClient | None = None, quick: bool = False, full: boo
     df.to_csv(out / "merged_gw.csv", index=False)
     res.rows = len(df)
     return res
+
+
+# --------------------------------------------------------------------------------------------
+# A manager's team (public, no login)
+# --------------------------------------------------------------------------------------------
+#
+#   entry/{id}/                      team name, overall rank, current_event (latest deadline passed)
+#   entry/{id}/history/              one row per gameweek (transfers, hits, bank, value) + chips
+#   entry/{id}/event/{gw}/picks/     the 15 picks, captain, active chip, bank and value
+#
+# Money is in tenths (bank 9 = £0.9m). Selling prices are NOT public (only the logged-in
+# my-team endpoint has them, which we never use), so callers price players at today's price.
+
+MAX_FREE_TRANSFERS = 5
+FREE_CHIPS = {"wildcard", "freehit"}  # transfers in these gameweeks don't cost or use free ones
+
+
+class EntryNotFound(LookupError):
+    pass
+
+
+@dataclass
+class EntryTeam:
+    team_id: int
+    team_name: str
+    overall_rank: int | None
+    picks_gameweek: int          # the gameweek whose picks we use
+    player_ids: list[int]        # 15 element ids in FPL's pick order (1-11 starters, 12-15 bench)
+    captain: int | None
+    vice_captain: int | None
+    bank: float                  # £m, at the last deadline
+    squad_value: float           # £m, FPL's figure (selling value + bank)
+    free_transfers: int          # estimate for the next gameweek
+    free_transfers_note: str
+    active_chip: str | None
+    chips_used: list[dict]       # [{"name": "wildcard", "event": 3}, ...]
+    notes: list[str]
+
+
+def estimate_free_transfers(history: dict, started_event: int, through_gw: int) -> tuple[int, str]:
+    """Free transfers available for the gameweek after `through_gw`, replayed from the history.
+
+    Rules (2024-25 onwards): 1 free transfer per gameweek, up to 5 saved; before your first
+    gameweek transfers are unlimited; a Wildcard or Free Hit keeps the saved ones. A gameweek with
+    a hit (event_transfers_cost > 0) used up every free transfer, which re-anchors the estimate.
+    Special one-off top-ups FPL sometimes gives are not in the API, hence "estimate".
+    """
+    chips = {c["event"]: c["name"] for c in history.get("chips", [])}
+    rows = sorted((r for r in history.get("current", []) if r["event"] <= through_gw), key=lambda r: r["event"])
+    ft = 0
+    for r in rows:
+        gw, made, cost = r["event"], r.get("event_transfers", 0), r.get("event_transfers_cost", 0)
+        if gw > started_event and chips.get(gw) not in FREE_CHIPS:
+            ft = 0 if cost > 0 else max(0, ft - made)
+        ft = min(MAX_FREE_TRANSFERS, ft + 1)
+    used = sorted(g for g, c in chips.items() if c in FREE_CHIPS and g <= through_gw)
+    note = "Estimated from your transfer history (1 per gameweek, up to 5 saved)."
+    if used:
+        note += f" Assumes saved transfers were kept through your chip(s) in GW {', '.join(map(str, used))}."
+    return ft, note + " Check the FPL app and correct it if it differs."
+
+
+def fetch_entry_team(client: FplClient, team_id: int) -> EntryTeam:
+    """Load a manager's latest squad from the public endpoints. Never needs a login."""
+    try:
+        entry = client.get(f"entry/{team_id}")
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            raise EntryNotFound(f"FPL team {team_id} doesn't exist.") from e
+        raise
+    gw = entry.get("current_event")
+    if not gw:
+        raise EntryNotFound(f"FPL team {team_id} has no gameweek with a passed deadline yet.")
+    history = client.get(f"entry/{team_id}/history")
+    picks = client.get(f"entry/{team_id}/event/{gw}/picks")
+    notes = []
+    picks_gw = gw
+    if picks.get("active_chip") == "freehit" and gw > entry.get("started_event", gw):
+        # A Free Hit squad is for one gameweek only; the real squad comes back afterwards.
+        picks_gw = gw - 1
+        picks = client.get(f"entry/{team_id}/event/{picks_gw}/picks")
+        notes.append(f"You played your Free Hit in GW {gw}, so this is your squad from GW {picks_gw}, "
+                     "which FPL restores for the next gameweek.")
+    eh = picks["entry_history"]
+    ordered = sorted(picks["picks"], key=lambda p: p["position"])
+    ft, ft_note = estimate_free_transfers(history, entry.get("started_event", 1), gw)
+    return EntryTeam(
+        team_id=int(entry["id"]), team_name=entry.get("name", ""),
+        overall_rank=entry.get("summary_overall_rank"), picks_gameweek=picks_gw,
+        player_ids=[int(p["element"]) for p in ordered],
+        captain=next((int(p["element"]) for p in ordered if p.get("is_captain")), None),
+        vice_captain=next((int(p["element"]) for p in ordered if p.get("is_vice_captain")), None),
+        bank=eh.get("bank", 0) / 10.0, squad_value=eh.get("value", 0) / 10.0,
+        free_transfers=ft, free_transfers_note=ft_note,
+        active_chip=picks.get("active_chip"),
+        chips_used=[{"name": c["name"], "event": c["event"]} for c in history.get("chips", [])],
+        notes=notes,
+    )

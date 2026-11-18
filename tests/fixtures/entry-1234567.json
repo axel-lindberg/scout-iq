@@ -1,0 +1,28 @@
+{
+ "id": 1234567,
+ "started_event": 1,
+ "favourite_team": null,
+ "years_active": 12,
+ "current_event": 10,
+ "name": "Sample XI",
+ "name_change_blocked": false,
+ "entered_events": [
+  1,
+  2,
+  3,
+  4,
+  5,
+  6,
+  7,
+  8,
+  9,
+  10
+ ],
+ "last_deadline_bank": 9,
+ "last_deadline_value": 1025,
+ "last_deadline_total_transfers": 7,
+ "summary_overall_points": 621,
+ "summary_event_points": 56,
+ "summary_event_rank": 5382379,
+ "summary_overall_rank": 1859136
+}

@@ -19,6 +19,17 @@
               }
             ],
             "title": "Session Id"
+          },
+          "team": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TeamContext"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The user's squad from the My team page, if loaded"
           }
         },
         "required": [
@@ -122,6 +133,18 @@
             "title": "Expected Points Adjusted",
             "type": "number"
           },
+          "expected_points_horizon_adjusted": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Sum of expected_points_adjusted over the horizon, only when horizon > 1",
+            "title": "Expected Points Horizon Adjusted"
+          },
           "fixtures": {
             "title": "Fixtures",
             "type": "string"
@@ -129,6 +152,21 @@
           "full_name": {
             "title": "Full Name",
             "type": "string"
+          },
+          "gameweeks": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/GameweekPrediction"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Per-gameweek predictions, only when horizon > 1. Later ones are less certain.",
+            "title": "Gameweeks"
           },
           "name": {
             "title": "Name",
@@ -182,6 +220,144 @@
         "title": "ComparedPlayer",
         "type": "object"
       },
+      "EntryInfo": {
+        "properties": {
+          "active_chip": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Active Chip"
+          },
+          "bank": {
+            "title": "Bank",
+            "type": "number"
+          },
+          "captain": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Captain"
+          },
+          "chips_used": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Chips Used",
+            "type": "array"
+          },
+          "free_transfers": {
+            "description": "Estimate for the next gameweek",
+            "title": "Free Transfers",
+            "type": "integer"
+          },
+          "free_transfers_note": {
+            "title": "Free Transfers Note",
+            "type": "string"
+          },
+          "notes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Notes",
+            "type": "array"
+          },
+          "overall_rank": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Overall Rank"
+          },
+          "picks_gameweek": {
+            "title": "Picks Gameweek",
+            "type": "integer"
+          },
+          "squad_value": {
+            "title": "Squad Value",
+            "type": "number"
+          },
+          "team_id": {
+            "title": "Team Id",
+            "type": "integer"
+          },
+          "team_name": {
+            "title": "Team Name",
+            "type": "string"
+          },
+          "vice_captain": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vice Captain"
+          }
+        },
+        "required": [
+          "team_id",
+          "team_name",
+          "overall_rank",
+          "picks_gameweek",
+          "captain",
+          "vice_captain",
+          "bank",
+          "squad_value",
+          "free_transfers",
+          "free_transfers_note",
+          "active_chip",
+          "chips_used",
+          "notes"
+        ],
+        "title": "EntryInfo",
+        "type": "object"
+      },
+      "GameweekPrediction": {
+        "properties": {
+          "expected_points": {
+            "title": "Expected Points",
+            "type": "number"
+          },
+          "expected_points_adjusted": {
+            "title": "Expected Points Adjusted",
+            "type": "number"
+          },
+          "fixtures": {
+            "description": "e.g. 'ARS (H)', 'ARS (H), CHE (A)' in a double gameweek, '' if blank",
+            "title": "Fixtures",
+            "type": "string"
+          },
+          "gameweek": {
+            "title": "Gameweek",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "gameweek",
+          "fixtures",
+          "expected_points",
+          "expected_points_adjusted"
+        ],
+        "title": "GameweekPrediction",
+        "type": "object"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -193,6 +369,58 @@
           }
         },
         "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "LineupOut": {
+        "properties": {
+          "bench": {
+            "description": "In order: reserve GK first, then outfield by expected points",
+            "items": {
+              "type": "integer"
+            },
+            "title": "Bench",
+            "type": "array"
+          },
+          "captain": {
+            "title": "Captain",
+            "type": "integer"
+          },
+          "expected_points": {
+            "description": "XI total with the captain counted twice",
+            "title": "Expected Points",
+            "type": "number"
+          },
+          "formation": {
+            "description": "DEF-MID-FWD, e.g. '4-4-2'",
+            "title": "Formation",
+            "type": "string"
+          },
+          "gameweek": {
+            "title": "Gameweek",
+            "type": "integer"
+          },
+          "starters": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Starters",
+            "type": "array"
+          },
+          "vice_captain": {
+            "title": "Vice Captain",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "gameweek",
+          "formation",
+          "starters",
+          "bench",
+          "captain",
+          "vice_captain",
+          "expected_points"
+        ],
+        "title": "LineupOut",
         "type": "object"
       },
       "ModelCard": {
@@ -268,6 +496,18 @@
             "title": "Expected Points Adjusted",
             "type": "number"
           },
+          "expected_points_horizon_adjusted": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Sum of expected_points_adjusted over the horizon, only when horizon > 1",
+            "title": "Expected Points Horizon Adjusted"
+          },
           "fixtures": {
             "title": "Fixtures",
             "type": "string"
@@ -275,6 +515,21 @@
           "full_name": {
             "title": "Full Name",
             "type": "string"
+          },
+          "gameweeks": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/GameweekPrediction"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Per-gameweek predictions, only when horizon > 1. Later ones are less certain.",
+            "title": "Gameweeks"
           },
           "name": {
             "title": "Name",
@@ -324,11 +579,90 @@
         "title": "Player",
         "type": "object"
       },
+      "PlayerOption": {
+        "properties": {
+          "expected_points_horizon_adjusted": {
+            "title": "Expected Points Horizon Adjusted",
+            "type": "number"
+          },
+          "full_name": {
+            "title": "Full Name",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "position": {
+            "title": "Position",
+            "type": "string"
+          },
+          "price": {
+            "title": "Price",
+            "type": "number"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "team": {
+            "title": "Team",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "full_name",
+          "team",
+          "position",
+          "price",
+          "status",
+          "expected_points_horizon_adjusted"
+        ],
+        "title": "PlayerOption",
+        "type": "object"
+      },
+      "PlayersResponse": {
+        "properties": {
+          "players": {
+            "items": {
+              "$ref": "#/components/schemas/PlayerOption"
+            },
+            "title": "Players",
+            "type": "array"
+          }
+        },
+        "required": [
+          "players"
+        ],
+        "title": "PlayersResponse",
+        "type": "object"
+      },
       "PredictionsResponse": {
         "properties": {
           "gameweek": {
             "title": "Gameweek",
             "type": "integer"
+          },
+          "gameweeks": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "integer"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The horizon's gameweeks, only when horizon > 1",
+            "title": "Gameweeks"
           },
           "players": {
             "items": {
@@ -411,6 +745,197 @@
         "title": "RecentForm",
         "type": "object"
       },
+      "SquadPlayer": {
+        "properties": {
+          "availability": {
+            "enum": [
+              "fit",
+              "doubtful",
+              "out"
+            ],
+            "title": "Availability",
+            "type": "string"
+          },
+          "bench_order": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "1 = first on the bench (the reserve GK), None if starting",
+            "title": "Bench Order"
+          },
+          "chance_of_playing": {
+            "title": "Chance Of Playing",
+            "type": "integer"
+          },
+          "expected_points": {
+            "description": "Per horizon gameweek, chance-of-playing adjusted",
+            "items": {
+              "type": "number"
+            },
+            "title": "Expected Points",
+            "type": "array"
+          },
+          "expected_points_horizon_adjusted": {
+            "title": "Expected Points Horizon Adjusted",
+            "type": "number"
+          },
+          "full_name": {
+            "title": "Full Name",
+            "type": "string"
+          },
+          "gameweeks": {
+            "items": {
+              "$ref": "#/components/schemas/GameweekPrediction"
+            },
+            "title": "Gameweeks",
+            "type": "array"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "in_xi": {
+            "title": "In Xi",
+            "type": "boolean"
+          },
+          "is_captain": {
+            "title": "Is Captain",
+            "type": "boolean"
+          },
+          "is_vice_captain": {
+            "title": "Is Vice Captain",
+            "type": "boolean"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "news": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "News"
+          },
+          "position": {
+            "title": "Position",
+            "type": "string"
+          },
+          "price": {
+            "description": "Today's price in \u00a3m (selling prices aren't public)",
+            "title": "Price",
+            "type": "number"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "team": {
+            "title": "Team",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "team",
+          "position",
+          "price",
+          "availability",
+          "news",
+          "expected_points",
+          "expected_points_horizon_adjusted",
+          "full_name",
+          "chance_of_playing",
+          "status",
+          "gameweeks",
+          "in_xi",
+          "bench_order",
+          "is_captain",
+          "is_vice_captain"
+        ],
+        "title": "SquadPlayer",
+        "type": "object"
+      },
+      "SquadPlayerBrief": {
+        "properties": {
+          "availability": {
+            "enum": [
+              "fit",
+              "doubtful",
+              "out"
+            ],
+            "title": "Availability",
+            "type": "string"
+          },
+          "expected_points": {
+            "description": "Per horizon gameweek, chance-of-playing adjusted",
+            "items": {
+              "type": "number"
+            },
+            "title": "Expected Points",
+            "type": "array"
+          },
+          "expected_points_horizon_adjusted": {
+            "title": "Expected Points Horizon Adjusted",
+            "type": "number"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "news": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "News"
+          },
+          "position": {
+            "title": "Position",
+            "type": "string"
+          },
+          "price": {
+            "description": "Today's price in \u00a3m (selling prices aren't public)",
+            "title": "Price",
+            "type": "number"
+          },
+          "team": {
+            "title": "Team",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "team",
+          "position",
+          "price",
+          "availability",
+          "news",
+          "expected_points",
+          "expected_points_horizon_adjusted"
+        ],
+        "title": "SquadPlayerBrief",
+        "type": "object"
+      },
       "StatusResponse": {
         "properties": {
           "chat_available": {
@@ -431,6 +956,14 @@
             "title": "Gameweek",
             "type": "integer"
           },
+          "horizon_gameweeks": {
+            "description": "Gameweeks with predictions, the next one first",
+            "items": {
+              "type": "integer"
+            },
+            "title": "Horizon Gameweeks",
+            "type": "array"
+          },
           "model_card": {
             "$ref": "#/components/schemas/ModelCard"
           },
@@ -448,11 +981,248 @@
           "gameweek",
           "first_kickoff",
           "data_through_gw",
+          "horizon_gameweeks",
           "chat_available",
           "news_available",
           "model_card"
         ],
         "title": "StatusResponse",
+        "type": "object"
+      },
+      "TeamAnalysis": {
+        "properties": {
+          "bank": {
+            "title": "Bank",
+            "type": "number"
+          },
+          "entry": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EntryInfo"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The FPL team, when loaded by team ID"
+          },
+          "free_transfers": {
+            "title": "Free Transfers",
+            "type": "integer"
+          },
+          "gameweeks": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Gameweeks",
+            "type": "array"
+          },
+          "limitations": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Limitations",
+            "type": "array"
+          },
+          "lineup": {
+            "$ref": "#/components/schemas/LineupOut"
+          },
+          "player_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Player Ids",
+            "type": "array"
+          },
+          "source": {
+            "enum": [
+              "fpl",
+              "manual"
+            ],
+            "title": "Source",
+            "type": "string"
+          },
+          "squad": {
+            "description": "Starters (GK, DEF, MID, FWD) then the bench in order",
+            "items": {
+              "$ref": "#/components/schemas/SquadPlayer"
+            },
+            "title": "Squad",
+            "type": "array"
+          },
+          "squad_expected_points": {
+            "description": "Best XI + captain, per gameweek",
+            "items": {
+              "type": "number"
+            },
+            "title": "Squad Expected Points",
+            "type": "array"
+          },
+          "transfer_pairs": {
+            "items": {
+              "$ref": "#/components/schemas/TransferOut"
+            },
+            "title": "Transfer Pairs",
+            "type": "array"
+          },
+          "transfers": {
+            "items": {
+              "$ref": "#/components/schemas/TransferOut"
+            },
+            "title": "Transfers",
+            "type": "array"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          },
+          "weakest": {
+            "items": {
+              "$ref": "#/components/schemas/WeakPlayer"
+            },
+            "title": "Weakest",
+            "type": "array"
+          }
+        },
+        "required": [
+          "source",
+          "player_ids",
+          "gameweeks",
+          "bank",
+          "free_transfers",
+          "squad",
+          "lineup",
+          "squad_expected_points",
+          "weakest",
+          "transfers",
+          "transfer_pairs",
+          "warnings",
+          "limitations"
+        ],
+        "title": "TeamAnalysis",
+        "type": "object"
+      },
+      "TeamContext": {
+        "description": "The user's squad, sent with chat messages so the agent can analyse it.",
+        "properties": {
+          "bank": {
+            "default": 0.0,
+            "description": "\u00a3m",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Bank",
+            "type": "number"
+          },
+          "free_transfers": {
+            "default": 1,
+            "maximum": 5.0,
+            "minimum": 0.0,
+            "title": "Free Transfers",
+            "type": "integer"
+          },
+          "player_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "maxItems": 15,
+            "minItems": 15,
+            "title": "Player Ids",
+            "type": "array"
+          },
+          "team_name": {
+            "anyOf": [
+              {
+                "maxLength": 60,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Team Name"
+          }
+        },
+        "required": [
+          "player_ids"
+        ],
+        "title": "TeamContext",
+        "type": "object"
+      },
+      "TeamRequest": {
+        "properties": {
+          "bank": {
+            "anyOf": [
+              {
+                "maximum": 100.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "\u00a3m; default: from FPL, or 0",
+            "title": "Bank"
+          },
+          "free_transfers": {
+            "anyOf": [
+              {
+                "maximum": 5.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Default: estimated from FPL, or 1",
+            "title": "Free Transfers"
+          },
+          "horizon": {
+            "default": 5,
+            "maximum": 5.0,
+            "minimum": 1.0,
+            "title": "Horizon",
+            "type": "integer"
+          },
+          "include_pairs": {
+            "default": true,
+            "title": "Include Pairs",
+            "type": "boolean"
+          },
+          "player_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "integer"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "15 player ids, instead of team_id",
+            "title": "Player Ids"
+          },
+          "team_id": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "FPL team ID (the number in your Points page URL)",
+            "title": "Team Id"
+          }
+        },
+        "title": "TeamRequest",
         "type": "object"
       },
       "ToolCall": {
@@ -471,6 +1241,60 @@
           "args"
         ],
         "title": "ToolCall",
+        "type": "object"
+      },
+      "TransferOut": {
+        "properties": {
+          "bank_after": {
+            "title": "Bank After",
+            "type": "number"
+          },
+          "gain": {
+            "description": "Expected points gained over the horizon, before hits",
+            "title": "Gain",
+            "type": "number"
+          },
+          "gain_per_gameweek": {
+            "items": {
+              "type": "number"
+            },
+            "title": "Gain Per Gameweek",
+            "type": "array"
+          },
+          "hits": {
+            "description": "Points deducted: 4 per transfer beyond the free ones",
+            "title": "Hits",
+            "type": "integer"
+          },
+          "in": {
+            "items": {
+              "$ref": "#/components/schemas/SquadPlayerBrief"
+            },
+            "title": "In",
+            "type": "array"
+          },
+          "net_gain": {
+            "title": "Net Gain",
+            "type": "number"
+          },
+          "out": {
+            "items": {
+              "$ref": "#/components/schemas/SquadPlayerBrief"
+            },
+            "title": "Out",
+            "type": "array"
+          }
+        },
+        "required": [
+          "out",
+          "in",
+          "gain_per_gameweek",
+          "gain",
+          "hits",
+          "net_gain",
+          "bank_after"
+        ],
+        "title": "TransferOut",
         "type": "object"
       },
       "ValidationError": {
@@ -511,6 +1335,39 @@
           "type"
         ],
         "title": "ValidationError",
+        "type": "object"
+      },
+      "WeakPlayer": {
+        "properties": {
+          "expected_points_horizon_adjusted": {
+            "title": "Expected Points Horizon Adjusted",
+            "type": "number"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "reason": {
+            "enum": [
+              "unavailable",
+              "doubtful",
+              "low expected points"
+            ],
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "reason",
+          "expected_points_horizon_adjusted"
+        ],
+        "title": "WeakPlayer",
         "type": "object"
       }
     }
@@ -575,6 +1432,18 @@
               "minItems": 1,
               "title": "Names",
               "type": "array"
+            }
+          },
+          {
+            "in": "query",
+            "name": "horizon",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "maximum": 5,
+              "minimum": 1,
+              "title": "Horizon",
+              "type": "integer"
             }
           }
         ],
@@ -653,6 +1522,24 @@
         "summary": "News"
       }
     },
+    "/api/players": {
+      "get": {
+        "operationId": "players_api_players_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlayersResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Players"
+      }
+    },
     "/api/predictions": {
       "get": {
         "operationId": "predictions_api_predictions_get",
@@ -727,6 +1614,34 @@
               "title": "Include Unavailable",
               "type": "boolean"
             }
+          },
+          {
+            "description": "Gameweeks ahead (1 = next only)",
+            "in": "query",
+            "name": "horizon",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "description": "Gameweeks ahead (1 = next only)",
+              "maximum": 5,
+              "minimum": 1,
+              "title": "Horizon",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "rank_by",
+            "required": false,
+            "schema": {
+              "default": "next",
+              "enum": [
+                "next",
+                "horizon"
+              ],
+              "title": "Rank By",
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -770,6 +1685,44 @@
           }
         },
         "summary": "Status"
+      }
+    },
+    "/api/team/analyze": {
+      "post": {
+        "operationId": "analyze_team_api_team_analyze_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TeamRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TeamAnalysis"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Analyze Team"
       }
     }
   }

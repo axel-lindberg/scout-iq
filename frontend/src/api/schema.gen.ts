@@ -55,6 +55,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/players": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Players */
+        get: operations["players_api_players_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/predictions": {
         parameters: {
             query?: never;
@@ -89,6 +106,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/team/analyze": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Analyze Team */
+        post: operations["analyze_team_api_team_analyze_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -99,6 +133,8 @@ export interface components {
             message: string;
             /** Session Id */
             session_id?: string | null;
+            /** @description The user's squad from the My team page, if loaded */
+            team?: components["schemas"]["TeamContext"] | null;
         };
         /** ChatResponse */
         ChatResponse: {
@@ -139,10 +175,20 @@ export interface components {
              * @description expected_points x chance of playing
              */
             expected_points_adjusted: number;
+            /**
+             * Expected Points Horizon Adjusted
+             * @description Sum of expected_points_adjusted over the horizon, only when horizon > 1
+             */
+            expected_points_horizon_adjusted?: number | null;
             /** Fixtures */
             fixtures: string;
             /** Full Name */
             full_name: string;
+            /**
+             * Gameweeks
+             * @description Per-gameweek predictions, only when horizon > 1. Later ones are less certain.
+             */
+            gameweeks?: components["schemas"]["GameweekPrediction"][] | null;
             /** Name */
             name: string;
             /** News */
@@ -157,10 +203,84 @@ export interface components {
             /** Team */
             team: string;
         };
+        /** EntryInfo */
+        EntryInfo: {
+            /** Active Chip */
+            active_chip: string | null;
+            /** Bank */
+            bank: number;
+            /** Captain */
+            captain: number | null;
+            /** Chips Used */
+            chips_used: {
+                [key: string]: unknown;
+            }[];
+            /**
+             * Free Transfers
+             * @description Estimate for the next gameweek
+             */
+            free_transfers: number;
+            /** Free Transfers Note */
+            free_transfers_note: string;
+            /** Notes */
+            notes: string[];
+            /** Overall Rank */
+            overall_rank: number | null;
+            /** Picks Gameweek */
+            picks_gameweek: number;
+            /** Squad Value */
+            squad_value: number;
+            /** Team Id */
+            team_id: number;
+            /** Team Name */
+            team_name: string;
+            /** Vice Captain */
+            vice_captain: number | null;
+        };
+        /** GameweekPrediction */
+        GameweekPrediction: {
+            /** Expected Points */
+            expected_points: number;
+            /** Expected Points Adjusted */
+            expected_points_adjusted: number;
+            /**
+             * Fixtures
+             * @description e.g. 'ARS (H)', 'ARS (H), CHE (A)' in a double gameweek, '' if blank
+             */
+            fixtures: string;
+            /** Gameweek */
+            gameweek: number;
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
+        };
+        /** LineupOut */
+        LineupOut: {
+            /**
+             * Bench
+             * @description In order: reserve GK first, then outfield by expected points
+             */
+            bench: number[];
+            /** Captain */
+            captain: number;
+            /**
+             * Expected Points
+             * @description XI total with the captain counted twice
+             */
+            expected_points: number;
+            /**
+             * Formation
+             * @description DEF-MID-FWD, e.g. '4-4-2'
+             */
+            formation: string;
+            /** Gameweek */
+            gameweek: number;
+            /** Starters */
+            starters: number[];
+            /** Vice Captain */
+            vice_captain: number;
         };
         /**
          * ModelCard
@@ -194,10 +314,20 @@ export interface components {
              * @description expected_points x chance of playing
              */
             expected_points_adjusted: number;
+            /**
+             * Expected Points Horizon Adjusted
+             * @description Sum of expected_points_adjusted over the horizon, only when horizon > 1
+             */
+            expected_points_horizon_adjusted?: number | null;
             /** Fixtures */
             fixtures: string;
             /** Full Name */
             full_name: string;
+            /**
+             * Gameweeks
+             * @description Per-gameweek predictions, only when horizon > 1. Later ones are less certain.
+             */
+            gameweeks?: components["schemas"]["GameweekPrediction"][] | null;
             /** Name */
             name: string;
             /** News */
@@ -211,10 +341,39 @@ export interface components {
             /** Team */
             team: string;
         };
+        /** PlayerOption */
+        PlayerOption: {
+            /** Expected Points Horizon Adjusted */
+            expected_points_horizon_adjusted: number;
+            /** Full Name */
+            full_name: string;
+            /** Id */
+            id: number;
+            /** Name */
+            name: string;
+            /** Position */
+            position: string;
+            /** Price */
+            price: number;
+            /** Status */
+            status: string;
+            /** Team */
+            team: string;
+        };
+        /** PlayersResponse */
+        PlayersResponse: {
+            /** Players */
+            players: components["schemas"]["PlayerOption"][];
+        };
         /** PredictionsResponse */
         PredictionsResponse: {
             /** Gameweek */
             gameweek: number;
+            /**
+             * Gameweeks
+             * @description The horizon's gameweeks, only when horizon > 1
+             */
+            gameweeks?: number[] | null;
             /** Players */
             players: components["schemas"]["Player"][];
             /** Season */
@@ -233,6 +392,85 @@ export interface components {
             /** Season Avg Points */
             season_avg_points: number | null;
         };
+        /** SquadPlayer */
+        SquadPlayer: {
+            /**
+             * Availability
+             * @enum {string}
+             */
+            availability: "fit" | "doubtful" | "out";
+            /**
+             * Bench Order
+             * @description 1 = first on the bench (the reserve GK), None if starting
+             */
+            bench_order: number | null;
+            /** Chance Of Playing */
+            chance_of_playing: number;
+            /**
+             * Expected Points
+             * @description Per horizon gameweek, chance-of-playing adjusted
+             */
+            expected_points: number[];
+            /** Expected Points Horizon Adjusted */
+            expected_points_horizon_adjusted: number;
+            /** Full Name */
+            full_name: string;
+            /** Gameweeks */
+            gameweeks: components["schemas"]["GameweekPrediction"][];
+            /** Id */
+            id: number;
+            /** In Xi */
+            in_xi: boolean;
+            /** Is Captain */
+            is_captain: boolean;
+            /** Is Vice Captain */
+            is_vice_captain: boolean;
+            /** Name */
+            name: string;
+            /** News */
+            news: string | null;
+            /** Position */
+            position: string;
+            /**
+             * Price
+             * @description Today's price in £m (selling prices aren't public)
+             */
+            price: number;
+            /** Status */
+            status: string;
+            /** Team */
+            team: string;
+        };
+        /** SquadPlayerBrief */
+        SquadPlayerBrief: {
+            /**
+             * Availability
+             * @enum {string}
+             */
+            availability: "fit" | "doubtful" | "out";
+            /**
+             * Expected Points
+             * @description Per horizon gameweek, chance-of-playing adjusted
+             */
+            expected_points: number[];
+            /** Expected Points Horizon Adjusted */
+            expected_points_horizon_adjusted: number;
+            /** Id */
+            id: number;
+            /** Name */
+            name: string;
+            /** News */
+            news: string | null;
+            /** Position */
+            position: string;
+            /**
+             * Price
+             * @description Today's price in £m (selling prices aren't public)
+             */
+            price: number;
+            /** Team */
+            team: string;
+        };
         /** StatusResponse */
         StatusResponse: {
             /** Chat Available */
@@ -249,11 +487,109 @@ export interface components {
             first_kickoff: string;
             /** Gameweek */
             gameweek: number;
+            /**
+             * Horizon Gameweeks
+             * @description Gameweeks with predictions, the next one first
+             */
+            horizon_gameweeks: number[];
             model_card: components["schemas"]["ModelCard"];
             /** News Available */
             news_available: boolean;
             /** Season */
             season: string;
+        };
+        /** TeamAnalysis */
+        TeamAnalysis: {
+            /** Bank */
+            bank: number;
+            /** @description The FPL team, when loaded by team ID */
+            entry?: components["schemas"]["EntryInfo"] | null;
+            /** Free Transfers */
+            free_transfers: number;
+            /** Gameweeks */
+            gameweeks: number[];
+            /** Limitations */
+            limitations: string[];
+            lineup: components["schemas"]["LineupOut"];
+            /** Player Ids */
+            player_ids: number[];
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "fpl" | "manual";
+            /**
+             * Squad
+             * @description Starters (GK, DEF, MID, FWD) then the bench in order
+             */
+            squad: components["schemas"]["SquadPlayer"][];
+            /**
+             * Squad Expected Points
+             * @description Best XI + captain, per gameweek
+             */
+            squad_expected_points: number[];
+            /** Transfer Pairs */
+            transfer_pairs: components["schemas"]["TransferOut"][];
+            /** Transfers */
+            transfers: components["schemas"]["TransferOut"][];
+            /** Warnings */
+            warnings: string[];
+            /** Weakest */
+            weakest: components["schemas"]["WeakPlayer"][];
+        };
+        /**
+         * TeamContext
+         * @description The user's squad, sent with chat messages so the agent can analyse it.
+         */
+        TeamContext: {
+            /**
+             * Bank
+             * @description £m
+             * @default 0
+             */
+            bank: number;
+            /**
+             * Free Transfers
+             * @default 1
+             */
+            free_transfers: number;
+            /** Player Ids */
+            player_ids: number[];
+            /** Team Name */
+            team_name?: string | null;
+        };
+        /** TeamRequest */
+        TeamRequest: {
+            /**
+             * Bank
+             * @description £m; default: from FPL, or 0
+             */
+            bank?: number | null;
+            /**
+             * Free Transfers
+             * @description Default: estimated from FPL, or 1
+             */
+            free_transfers?: number | null;
+            /**
+             * Horizon
+             * @default 5
+             */
+            horizon: number;
+            /**
+             * Include Pairs
+             * @default true
+             */
+            include_pairs: boolean;
+            /**
+             * Player Ids
+             * @description 15 player ids, instead of team_id
+             */
+            player_ids?: number[] | null;
+            /**
+             * Team Id
+             * @description FPL team ID (the number in your Points page URL)
+             */
+            team_id?: number | null;
         };
         /** ToolCall */
         ToolCall: {
@@ -264,6 +600,29 @@ export interface components {
             args: unknown;
             /** Tool */
             tool: string;
+        };
+        /** TransferOut */
+        TransferOut: {
+            /** Bank After */
+            bank_after: number;
+            /**
+             * Gain
+             * @description Expected points gained over the horizon, before hits
+             */
+            gain: number;
+            /** Gain Per Gameweek */
+            gain_per_gameweek: number[];
+            /**
+             * Hits
+             * @description Points deducted: 4 per transfer beyond the free ones
+             */
+            hits: number;
+            /** In */
+            in: components["schemas"]["SquadPlayerBrief"][];
+            /** Net Gain */
+            net_gain: number;
+            /** Out */
+            out: components["schemas"]["SquadPlayerBrief"][];
         };
         /** ValidationError */
         ValidationError: {
@@ -277,6 +636,20 @@ export interface components {
             msg: string;
             /** Error Type */
             type: string;
+        };
+        /** WeakPlayer */
+        WeakPlayer: {
+            /** Expected Points Horizon Adjusted */
+            expected_points_horizon_adjusted: number;
+            /** Id */
+            id: number;
+            /** Name */
+            name: string;
+            /**
+             * Reason
+             * @enum {string}
+             */
+            reason: "unavailable" | "doubtful" | "low expected points";
         };
     };
     responses: never;
@@ -324,6 +697,7 @@ export interface operations {
         parameters: {
             query: {
                 names: string[];
+                horizon?: number;
             };
             header?: never;
             path?: never;
@@ -383,6 +757,26 @@ export interface operations {
             };
         };
     };
+    players_api_players_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlayersResponse"];
+                };
+            };
+        };
+    };
     predictions_api_predictions_get: {
         parameters: {
             query?: {
@@ -391,6 +785,9 @@ export interface operations {
                 team?: string | null;
                 top_n?: number;
                 include_unavailable?: boolean;
+                /** @description Gameweeks ahead (1 = next only) */
+                horizon?: number;
+                rank_by?: "next" | "horizon";
             };
             header?: never;
             path?: never;
@@ -434,6 +831,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["StatusResponse"];
+                };
+            };
+        };
+    };
+    analyze_team_api_team_analyze_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TeamRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeamAnalysis"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

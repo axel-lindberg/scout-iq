@@ -3,6 +3,8 @@ import type { ToolCall } from "../../api/endpoints";
 import { useChat, useStatus } from "../../api/queries";
 import { Card } from "../../components/Card";
 import { formatToolCall } from "../../lib/format";
+import { teamContext, useSavedTeam } from "../../lib/teamStore";
+import { Link } from "react-router";
 
 const SUGGESTIONS = ["Who should I captain?", "Best defenders under £5m?", "Any Arsenal injuries?"];
 const GREETING =
@@ -51,8 +53,9 @@ function Bubble({ m }: { m: Message }) {
   );
 }
 
-export function ChatPanel() {
+export function ChatPanel({ suggestions = SUGGESTIONS }: { suggestions?: readonly string[] }) {
   const status = useStatus();
+  const team = useSavedTeam();
   const chat = useChat();
   const enabled = status.data?.chat_available === true;
 
@@ -80,7 +83,11 @@ export function ChatPanel() {
     add({ role: "user", text: message });
     setInput("");
     try {
-      const res = await chat.mutateAsync({ message, session_id: sessionId.current });
+      const res = await chat.mutateAsync({
+        message,
+        session_id: sessionId.current,
+        ...(team ? { team: teamContext(team) } : {}), // the agent can analyse it with analyze_my_team
+      });
       sessionId.current = res.session_id;
       add({ role: "assistant", text: res.answer, tools: res.tools });
     } catch (e) {
@@ -101,7 +108,7 @@ export function ChatPanel() {
         Ask the scout
       </h2>
       <div className="mb-2 flex flex-wrap gap-1.5">
-        {SUGGESTIONS.map((s) => (
+        {suggestions.map((s) => (
           <button
             key={s}
             type="button"
@@ -142,8 +149,25 @@ export function ChatPanel() {
         )}
       </div>
 
+      <p className="mt-2 text-xs text-muted">
+        {team ? (
+          <>
+            Using your team{team.entry ? ` “${team.entry.team_name}”` : ""} for questions about it.{" "}
+            <Link to="/my-team" className="underline underline-offset-2">
+              Edit
+            </Link>
+          </>
+        ) : (
+          <>
+            Want advice on your own squad?{" "}
+            <Link to="/my-team" className="underline underline-offset-2">
+              Load your team
+            </Link>
+          </>
+        )}
+      </p>
       <form
-        className="mt-2 flex gap-2"
+        className="mt-1.5 flex gap-2"
         onSubmit={(e) => {
           e.preventDefault();
           void ask(input);

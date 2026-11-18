@@ -1,8 +1,11 @@
 import type { Player } from "../../api/endpoints";
 import { AvailabilityBadge } from "../../components/AvailabilityBadge";
+import { aheadOpacity } from "../../lib/format";
 
 interface Props {
   players: Player[];
+  /** Gameweeks after the next one, shown as extra columns (empty: next gameweek only). */
+  laterGameweeks?: readonly number[];
   selected: readonly string[];
   selectionFull: boolean;
   onToggle: (fullName: string, checked: boolean) => void;
@@ -13,7 +16,7 @@ const BAR_PX = 40;
 // Opaque row colours, also set on the sticky first two columns so they cover what scrolls under them.
 const ROW_BG = "bg-surface group-hover:bg-surface-2 group-data-[selected=true]:bg-accent-soft";
 
-export function PredictionsTable({ players, selected, selectionFull, onToggle, stale }: Props) {
+export function PredictionsTable({ players, laterGameweeks = [], selected, selectionFull, onToggle, stale }: Props) {
   const maxXp = Math.max(1, ...players.map((p) => p.expected_points_adjusted));
   return (
     <tbody className={stale ? "opacity-60 transition-opacity" : "transition-opacity"}>
@@ -61,6 +64,26 @@ export function PredictionsTable({ players, selected, selectionFull, onToggle, s
                 />
               </span>
             </td>
+            {laterGameweeks.map((gw, i) => {
+              const g = p.gameweeks?.find((x) => x.gameweek === gw);
+              return (
+                <td
+                  key={gw}
+                  className="px-2 py-1.5 text-right whitespace-nowrap"
+                  style={{ opacity: aheadOpacity(i + 1) }}
+                >
+                  <span className="block font-mono text-[13px] tabular-nums">
+                    {g ? g.expected_points_adjusted.toFixed(1) : "–"}
+                  </span>
+                  <span className="block text-[11px] text-muted">{g ? g.fixtures || "blank" : ""}</span>
+                </td>
+              );
+            })}
+            {laterGameweeks.length > 0 && (
+              <td className="px-2 py-2 text-right font-mono font-medium tabular-nums">
+                {p.expected_points_horizon_adjusted?.toFixed(1) ?? "–"}
+              </td>
+            )}
             <td className="px-2 py-2">
               <AvailabilityBadge player={p} />
             </td>

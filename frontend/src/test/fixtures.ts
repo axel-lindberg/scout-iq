@@ -1,4 +1,23 @@
-import type { ComparedPlayer, Comparison, Player, Predictions, Status } from "../api/endpoints";
+import type { ComparedPlayer, Comparison, GameweekPrediction, Player, Predictions, Status } from "../api/endpoints";
+
+export const GAMEWEEKS = [11, 12, 13, 14, 15];
+const LATER_OPPONENTS = ["LIV (H)", "NEW (A)", "BOU (H)", "EVE (A)"];
+
+/** Next gameweek as given, then 1.0 less in GW 12, a blank in GW 13 for MCI and the same after. */
+export function gameweeks(p: Pick<Player, "fixtures" | "expected_points" | "expected_points_adjusted" | "team">): GameweekPrediction[] {
+  return GAMEWEEKS.map((gw, i) => {
+    if (i === 0) return { gameweek: gw, fixtures: p.fixtures, expected_points: p.expected_points, expected_points_adjusted: p.expected_points_adjusted };
+    const blank = p.team === "MCI" && gw === 13;
+    const x = blank ? 0 : Math.max(0, p.expected_points_adjusted - (gw === 12 ? 1 : 0));
+    return { gameweek: gw, fixtures: blank ? "" : (LATER_OPPONENTS[i - 1] ?? ""), expected_points: x, expected_points_adjusted: x };
+  });
+}
+
+/** The same player as the API sends it with horizon=5. */
+export function withHorizon(p: Player): Player {
+  const gws = gameweeks(p);
+  return { ...p, gameweeks: gws, expected_points_horizon_adjusted: Math.round(gws.reduce((s, g) => s + g.expected_points_adjusted, 0) * 100) / 100 };
+}
 
 export function status(overrides: Partial<Status> = {}): Status {
   return {
@@ -6,6 +25,7 @@ export function status(overrides: Partial<Status> = {}): Status {
     gameweek: 11,
     first_kickoff: "2026-11-22T12:30:00+00:00",
     data_through_gw: 10,
+    horizon_gameweeks: GAMEWEEKS,
     chat_available: true,
     news_available: true,
     model_card: {
@@ -55,8 +75,10 @@ export const PLAYERS: Player[] = [
   player({ name: "Raya", full_name: "David Raya Martín", team: "ARS", position: "GK", price: 5.6, expected_points: 3.9, expected_points_adjusted: 3.9, fixtures: "TOT (A)" }),
 ];
 
-export function predictions(players: Player[] = PLAYERS): Predictions {
-  return { gameweek: 11, season: "2026-27", players };
+/** A /api/predictions response; with horizon (the table asks for 5) every player gets per-GW rows. */
+export function predictions(players: Player[] = PLAYERS, horizon = true): Predictions {
+  if (!horizon) return { gameweek: 11, season: "2026-27", players };
+  return { gameweek: 11, season: "2026-27", players: players.map(withHorizon), gameweeks: GAMEWEEKS };
 }
 
 export function compared(p: Player): ComparedPlayer {

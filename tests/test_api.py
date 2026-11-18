@@ -5,6 +5,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+import pandas as pd
 from fastapi.testclient import TestClient
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
@@ -19,8 +20,9 @@ class FakeAgent:
     def __init__(self):
         self.trace, self.n = [], 0
 
-    def ask(self, q):
+    def ask(self, q, team=None):
         self.n += 1
+        self.team = team
         self.trace = [{"tool": "get_predictions", "args": {}}]
         return f"answer {self.n} to {q}"
 
@@ -161,3 +163,154 @@ def test_frontend_not_built_explains_how_to_build(tmp_path):
         r = c.get(path)
         assert r.status_code == 200 and "npm run build" in r.text
     assert c.get("/api/status").status_code == 200
+
+
+# ---- several gameweeks ahead ------------------------------------------------------
+
+def _two_gameweeks():
+    """GW 7 as in _upcoming(); in GW 8 Gabriel has a double and Haaland a blank."""
+    up = _upcoming()
+    p = up.predictions
+    gw8 = {"Haaland": (0.0, ""), "Saka": (5.0, "CHE (H)"), "Gabriel": (9.0, "CHE (H), MCI (A)"),
+           "Injured": (4.0, "ARS (A)")}
+    rows = []
+    for r in p.itertuples():
+        rows.append((r.element, 7, r.xpts, r.xpts_adjusted, r.chance_of_playing, r.fixtures, 1))
+        x, fx = gw8[r.web_name]
+        adj = x * r.chance_of_playing / 100
+        rows.append((r.element, 8, x, adj, r.chance_of_playing, fx, fx.count("(")))
+    up.by_gw = pd.DataFrame(rows, columns=["element", "GW", "xpts", "xpts_adjusted", "chance_of_playing",
+                                           "fixtures", "n_fixtures"])
+    up.gameweeks = [7, 8]
+    return TestClient(create_app(up, ScoutTools(up), FakeAgent))
+
+
+def test_predictions_horizon():
+    c = _two_gameweeks()
+    assert c.get("/api/status").json()["horizon_gameweeks"] == [7, 8]
+    default = c.get("/api/predictions").json()
+    assert "gameweeks" not in default and "gameweeks" not in default["players"][0]   # unchanged shape
+    r = c.get("/api/predictions", params={"horizon": 2}).json()
+    assert r["gameweeks"] == [7, 8]
+    assert [p["name"] for p in r["players"]] == ["Haaland", "Gabriel", "Saka"]     # still next-GW order
+    haaland = r["players"][0]
+    assert haaland["gameweeks"] == [
+        {"gameweek": 7, "fixtures": "XXX (H)", "expected_points": 6.0, "expected_points_adjusted": 6.0},
+        {"gameweek": 8, "fixtures": "", "expected_points": 0.0, "expected_points_adjusted": 0.0}]
+    assert haaland["expected_points_horizon_adjusted"] == 6.0
+    ranked = c.get("/api/predictions", params={"horizon": 2, "rank_by": "horizon"}).json()["players"]
+    assert [p["name"] for p in ranked] == ["Gabriel", "Haaland", "Saka"]           # 13, 6, 5
+    assert c.get("/api/predictions", params={"horizon": 9}).status_code == 422
+
+
+def test_horizon_is_clamped_to_available_gameweeks():
+    r = _client().get("/api/predictions", params={"horizon": 3}).json()            # only GW 7 known
+    assert "gameweeks" not in r
+
+
+# ---- my team -----------------------------------------------------------------------
+
+def _team_client(fpl=None):
+    import team_data
+    from test_team import BUYS
+    up, ids = team_data.upcoming(extra=BUYS)
+    agents = []
+
+    def factory():
+        agents.append(FakeAgent())
+        return agents[-1]
+    return TestClient(create_app(up, ScoutTools(up), factory, fpl_client=fpl)), ids, agents
+
+
+class FakeFpl:
+    """The three public entry endpoints for team 77, whose picks are the synthetic squad."""
+
+    def __init__(self, ids, fail=None):
+        self.ids, self.fail = ids, fail
+
+    def get(self, path):
+        import urllib.error
+        if self.fail:
+            raise self.fail
+        if path == "entry/77":
+            return {"id": 77, "name": "Test FC", "summary_overall_rank": 1234, "current_event": 10, "started_event": 1}
+        if path == "entry/77/history":
+            return {"current": [{"event": g, "event_transfers": 0, "event_transfers_cost": 0} for g in range(1, 11)],
+                    "chips": []}
+        if path == "entry/77/event/10/picks":
+            return {"active_chip": None, "entry_history": {"bank": 15, "value": 1000},
+                    "picks": [{"element": e, "position": n + 1, "is_captain": n == 0, "is_vice_captain": n == 1}
+                              for n, e in enumerate(self.ids)]}
+        raise urllib.error.HTTPError(path, 404, "Not Found", {}, None)
+
+
+def test_team_analyze_by_player_ids():
+    c, ids, _ = _team_client()
+    r = c.post("/api/team/analyze", json={"player_ids": ids, "bank": 0, "free_transfers": 1})
+    assert r.status_code == 200, r.text
+    a = r.json()
+    assert a["source"] == "manual" and a["entry"] is None and a["gameweeks"] == [11, 12]
+    assert len(a["squad"]) == 15 and len(a["lineup"]["starters"]) == 11 and len(a["lineup"]["bench"]) == 4
+    assert [s["id"] for s in a["squad"]] == a["lineup"]["starters"] + a["lineup"]["bench"]
+    assert a["lineup"]["expected_points"] == 24.0 and a["squad_expected_points"] == [24.0, 24.0]
+    best = a["transfers"][0]
+    assert [p["name"] for p in best["out"]] == ["WeakMid"] and [p["name"] for p in best["in"]] == ["GoodMid"]
+    assert best["gain_per_gameweek"] == [8.0, 8.0] and best["net_gain"] == 16.0 and best["hits"] == 0
+    assert a["weakest"][0]["name"] == "WeakMid"
+    assert any("Selling prices" in x for x in a["limitations"])
+
+
+def test_team_analyze_validation_errors():
+    c, ids, _ = _team_client()
+    r = c.post("/api/team/analyze", json={"player_ids": ids[:14]})
+    assert r.status_code == 422 and "15 players" in r.json()["detail"]
+    assert c.post("/api/team/analyze", json={}).status_code == 422                       # neither
+    assert c.post("/api/team/analyze", json={"team_id": 1, "player_ids": ids}).status_code == 422   # both
+    assert c.post("/api/team/analyze", json={"player_ids": ids, "free_transfers": 9}).status_code == 422
+
+
+def test_team_analyze_by_fpl_team_id_with_overrides():
+    _, ids, _ = _team_client()
+    c2 = TestClient(create_app(*_team_app(ids), None, fpl_client=FakeFpl(ids)))
+    a = c2.post("/api/team/analyze", json={"team_id": 77}).json()
+    assert a["source"] == "fpl" and a["entry"]["team_name"] == "Test FC" and a["entry"]["picks_gameweek"] == 10
+    assert a["bank"] == 1.5 and a["free_transfers"] == 5 == a["entry"]["free_transfers"]   # saved up all season
+    assert a["player_ids"] == ids
+    b = c2.post("/api/team/analyze", json={"team_id": 77, "bank": 0.0, "free_transfers": 0}).json()
+    assert b["bank"] == 0.0 and b["free_transfers"] == 0 and b["transfers"][0]["hits"] == 4   # overrides win
+
+
+def _team_app(ids):
+    import team_data
+    from test_team import BUYS
+    up, _ = team_data.upcoming(extra=BUYS)
+    return up, ScoutTools(up)
+
+
+def test_team_analyze_fpl_errors():
+    _, ids, _ = _team_client()
+    import urllib.error
+    missing = TestClient(create_app(*_team_app(ids), None, fpl_client=FakeFpl(ids)))
+    r = missing.post("/api/team/analyze", json={"team_id": 78})
+    assert r.status_code == 404 and "doesn't exist" in r.json()["detail"]
+    down = TestClient(create_app(*_team_app(ids), None, fpl_client=FakeFpl(ids, fail=urllib.error.URLError("x"))))
+    r = down.post("/api/team/analyze", json={"team_id": 77})
+    assert r.status_code == 502 and "by hand" in r.json()["detail"]
+
+
+def test_players_list_for_manual_picking():
+    c, ids, _ = _team_client()
+    players = c.get("/api/players").json()["players"]
+    assert {p["id"] for p in players} >= set(ids) and players[0]["name"] == "StarFwd"   # 20 pts over 2 GWs
+    assert set(players[0]) == {"id", "name", "full_name", "team", "position", "price", "status",
+                               "expected_points_horizon_adjusted"}
+
+
+def test_chat_passes_the_team_to_the_agent():
+    c, ids, agents = _team_client()
+    team = {"player_ids": ids, "bank": 0.5, "free_transfers": 2, "team_name": "Test FC"}
+    sid = c.post("/api/chat", json={"message": "who should I sell?", "team": team}).json()["session_id"]
+    assert agents[0].team == team
+    c.post("/api/chat", json={"message": "and now?", "session_id": sid})
+    assert agents[0].team is None                                     # no team sent -> none
+    assert c.post("/api/chat", json={"message": "x", "team": {**team, "player_ids": ids[:3]}}).status_code == 422

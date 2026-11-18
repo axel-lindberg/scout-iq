@@ -1,6 +1,11 @@
-import { Link } from "react-router";
+import { Link, NavLink } from "react-router";
 import { useStatus } from "../../api/queries";
 import { formatKickoff } from "../../lib/format";
+
+const PAGES = [
+  { to: "/", label: "Predictions" },
+  { to: "/my-team", label: "My team" },
+];
 
 export function StatusHeader() {
   const { data, error, isPending } = useStatus();
@@ -12,6 +17,20 @@ export function StatusHeader() {
             scout<span className="text-accent">-iq</span>
           </Link>
         </h1>
+        <nav aria-label="Pages" className="flex gap-1 text-sm">
+          {PAGES.map(({ to, label }) => (
+            <NavLink
+              key={to}
+              to={to}
+              end
+              className={({ isActive }) =>
+                `rounded-md px-2 py-0.5 font-medium ${isActive ? "bg-accent-soft text-accent-strong" : "text-muted hover:text-ink"}`
+              }
+            >
+              {label}
+            </NavLink>
+          ))}
+        </nav>
         {isPending && <p className="text-sm text-muted">Loading…</p>}
         {error && (
           <p role="alert" className="text-sm">
