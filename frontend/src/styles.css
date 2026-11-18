@@ -21,7 +21,7 @@
   --pitch-stripe: #339656;
   --pitch-line: rgb(255 255 255 / 0.5);
   /* Fixture difficulty, 1 = very easy ... 5 = very hard (darkest = most extreme); each fill has its
-     own text colour (>= 4.5:1). */
+     own text colour (>= 4.5:1, except white on hard: 3.8:1, chosen by Axel). */
   --fdr-1: #1d7a47;
   --fdr-1-ink: #ffffff;
   --fdr-2: #bfe3cb;
@@ -29,7 +29,7 @@
   --fdr-3: #e3e6e2;
   --fdr-3-ink: #15181d;
   --fdr-4: #ff1751;
-  --fdr-4-ink: #1a0005;
+  --fdr-4-ink: #ffffff;
   --fdr-5: #80072d;
   --fdr-5-ink: #ffffff;
   color-scheme: light;
@@ -62,7 +62,7 @@
     --fdr-3: #3a434c;
     --fdr-3-ink: #eef1f4;
     --fdr-4: #ff1751;
-    --fdr-4-ink: #1a0005;
+    --fdr-4-ink: #ffffff;
     --fdr-5: #80072d;
     --fdr-5-ink: #ffffff;
     color-scheme: dark;
