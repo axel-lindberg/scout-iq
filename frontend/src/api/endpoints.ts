@@ -22,6 +22,9 @@ export type SquadPlayerBrief = Schemas["SquadPlayerBrief"];
 export type Transfer = Schemas["TransferOut"];
 export type EntryInfo = Schemas["EntryInfo"];
 export type PlayerOption = Schemas["PlayerOption"];
+export type FixturesResponse = Schemas["FixturesResponse"];
+export type FixtureTeam = Schemas["FixtureTeam"];
+export type RatedFixture = Schemas["RatedFixture"];
 
 export type PredictionsQuery = NonNullable<paths["/api/predictions"]["get"]["parameters"]["query"]>;
 
@@ -69,4 +72,8 @@ export function postTeamAnalyze(body: TeamRequest, signal?: AbortSignal): Promis
     body: JSON.stringify(body),
     signal: signal ?? null,
   });
+}
+
+export function getFixtures(signal?: AbortSignal): Promise<FixturesResponse> {
+  return apiFetch<FixturesResponse>("/api/fixtures", { signal: signal ?? null });
 }

@@ -1,4 +1,5 @@
 import type { RouteObject } from "react-router";
+import { FixturesPage } from "../pages/FixturesPage";
 import { MyTeamPage } from "../pages/MyTeamPage";
 import { NotFoundPage } from "../pages/NotFoundPage";
 import { ScoutPage } from "../pages/ScoutPage";
@@ -15,6 +16,7 @@ export const routes: RouteObject[] = [
     children: [
       { index: true, element: <ScoutPage /> },
       { path: "my-team", element: <MyTeamPage /> },
+      { path: "fixtures", element: <FixturesPage /> },
       { path: "*", element: <NotFoundPage /> },
     ],
   },

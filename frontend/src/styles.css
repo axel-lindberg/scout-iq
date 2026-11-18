@@ -20,6 +20,17 @@
   --pitch: #2e8b4f;
   --pitch-stripe: #339656;
   --pitch-line: rgb(255 255 255 / 0.5);
+  /* Fixture difficulty, 1 = very easy ... 5 = very hard; each fill has its own text colour (>= 4.5:1). */
+  --fdr-1: #1d7a47;
+  --fdr-1-ink: #ffffff;
+  --fdr-2: #bfe3cb;
+  --fdr-2-ink: #0f3320;
+  --fdr-3: #e3e6e2;
+  --fdr-3-ink: #15181d;
+  --fdr-4: #f3bcb6;
+  --fdr-4-ink: #4a0f0b;
+  --fdr-5: #8f1d17;
+  --fdr-5-ink: #ffffff;
   color-scheme: light;
 }
 
@@ -42,6 +53,16 @@
     --pitch: #1d5434;
     --pitch-stripe: #205b38;
     --pitch-line: rgb(255 255 255 / 0.22);
+    --fdr-1: #3d9c68;
+    --fdr-1-ink: #04140b;
+    --fdr-2: #1e4a31;
+    --fdr-2-ink: #d6f1e0;
+    --fdr-3: #2b333b;
+    --fdr-3-ink: #e7ebef;
+    --fdr-4: #5c2723;
+    --fdr-4-ink: #ffdcd8;
+    --fdr-5: #b3362e;
+    --fdr-5-ink: #ffffff;
     color-scheme: dark;
   }
 }
@@ -62,6 +83,16 @@
   --color-bad: var(--bad);
   --color-bad-soft: var(--bad-soft);
   --color-pitch: var(--pitch);
+  --color-fdr-1: var(--fdr-1);
+  --color-fdr-1-ink: var(--fdr-1-ink);
+  --color-fdr-2: var(--fdr-2);
+  --color-fdr-2-ink: var(--fdr-2-ink);
+  --color-fdr-3: var(--fdr-3);
+  --color-fdr-3-ink: var(--fdr-3-ink);
+  --color-fdr-4: var(--fdr-4);
+  --color-fdr-4-ink: var(--fdr-4-ink);
+  --color-fdr-5: var(--fdr-5);
+  --color-fdr-5-ink: var(--fdr-5-ink);
 
   --font-display: "Barlow Condensed", "Arial Narrow", sans-serif;
   --font-sans: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;

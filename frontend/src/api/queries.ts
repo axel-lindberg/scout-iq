@@ -2,6 +2,7 @@
 import { keepPreviousData, useMutation, useQuery } from "@tanstack/react-query";
 import {
   getComparison,
+  getFixtures,
   getPlayers,
   getPredictions,
   getStatus,
@@ -16,6 +17,7 @@ export const queryKeys = {
   predictions: (q: PredictionsQuery) => ["predictions", q] as const,
   comparison: (names: readonly string[]) => ["comparison", names] as const,
   players: ["players"] as const,
+  fixtures: ["fixtures"] as const,
   team: (req: TeamRequest) => ["team", req] as const,
 };
 
@@ -68,4 +70,8 @@ export function useTeamAnalysis(req: TeamRequest | null) {
 /** Load a team by FPL team ID (the backend fetches it from the public FPL API). */
 export function useLoadTeam() {
   return useMutation({ mutationFn: (teamId: number) => postTeamAnalyze({ team_id: teamId, horizon: 5, include_pairs: true }) });
+}
+
+export function useFixtures() {
+  return useQuery({ queryKey: queryKeys.fixtures, queryFn: ({ signal }) => getFixtures(signal), staleTime: STALE });
 }
