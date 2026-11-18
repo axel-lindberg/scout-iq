@@ -58,9 +58,11 @@ My team: FPL entry endpoints (`fpl_api.fetch_entry_team`) or 15 hand-picked ids 
 - `app/`: `routes.tsx` (all pages), `Layout.tsx` (header + outlet).
 - `pages/`: `ScoutPage` (predictions + chat), `MyTeamPage` (team + chat), `NotFoundPage`.
 - `features/`: `predictions/`, `compare/`, `chat/`, `status/` (header + nav, model card), `team/` (load by
-  ID, `SquadBuilder`, `Pitch`, `SquadTable`, `Transfers`, `TeamSettings`).
+  ID, `SquadBuilder`, `Planner` (editable `Pitch` + `PlayerPicker`, Optimise/Save/Reset), `SquadTable`,
+  `Transfers`, `TeamSettings`).
 - `components/`, `lib/`: shared UI (Card, Tooltip, AvailabilityBadge) and helpers; `lib/teamStore.ts`
-  keeps the squad in localStorage (the chat sends it); `lib/squad.ts` mirrors the squad rules.
+  keeps the loaded squad + saved plan in localStorage (the chat sends the planned squad); `lib/squad.ts`
+  mirrors the squad rules; `lib/plan.ts` is the pure draft logic (slots, swaps, armband, transfer count).
 - `test/`: fixtures, mocked fetch (`mockApi.ts`), `renderApp()`.
 
 ## Commands
@@ -117,7 +119,8 @@ some experiments himself, so leave those as next steps instead of doing them.
 ## Current status
 
 - Predictions cover the next 5 gameweeks (`/api/predictions?horizon=5`, faded columns in the table).
-- My team page + `analyze_my_team` tool, checked end to end on Axel's real team (2026-11-17).
+- My team page + `analyze_my_team` + transfer planner on the pitch (sell ×, buy +, subs, captain,
+  Optimise/Save/Reset), all checked on Axel's real team (2026-11-17). Unsaved drafts aren't persisted.
 - Known limits: no selling prices (public API), free transfers estimated, the agent sometimes adds
   claims the tool didn't give (e.g. "reliable"): an agent eval would catch this.
 
@@ -127,8 +130,8 @@ some experiments himself, so leave those as next steps instead of doing them.
   ahead with form frozen at the cutoff (walk-forward, cutoff = kickoff of GW g, predict g+k)? Not
   implemented on purpose; `upcoming_features()` is the piece to reuse.
 
-- Confidence intervals for model vs baselines (gameweek bootstrap) and several random seeds.
-- An agent evaluation set (questions with expected tools and facts), traced in LangSmith.
+- Confidence intervals for model vs baselines (gameweek bootstrap) and several random seeds; an
+  agent evaluation set (questions with expected tools and facts), traced in LangSmith.
 - Bench value / auto-subs in the team objective (bench points count 0 now), and a "roll the
   transfer" option valued explicitly.
 - Link players across seasons so early-season predictions improve.
@@ -141,11 +144,14 @@ some experiments himself, so leave those as next steps instead of doing them.
 - 2026-11-13: Current season from the official FPL API in vaastav's format; only finished gameweeks.
 - 2026-11-15: Ownership removed from the final model: same-week, previous-week and no ownership
   were within 0.006 MAE; no ownership was marginally best (MAE 1.877).
-- 2026-11-15: Vite + React, not Next.js: the backend is FastAPI, no server rendering is needed.
-- 2026-11-15: API types generated from FastAPI's OpenAPI schema so backend and frontend can't drift.
+- 2026-11-15: Vite + React, not Next.js (FastAPI backend, no server rendering needed); API types
+  generated from FastAPI's OpenAPI schema so backend and frontend can't drift.
 - 2026-11-17: Multi-gameweek predictions build each slot separately instead of one build with all
   future rows, which would count unplayed matches inside the rolling windows. Next-GW output unchanged.
 - 2026-11-17: Team optimisation in Python, not the LLM: hard rules (formation, budget, club limit)
   must always hold and the answer must be reproducible and testable.
 - 2026-11-17: Team endpoint stateless (team_id or player_ids per request); the frontend keeps the
   squad in localStorage and sends it with chat messages.
+- 2026-11-17: Planned transfers are counted against the loaded squad, not the last save: buying a sold
+  player back is free and Reset just drops the plan. Lineup points are summed in the browser (from
+  `/api/players` per-GW xPts) for instant feedback; the best XI still comes only from `team.py`.

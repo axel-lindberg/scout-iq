@@ -18,7 +18,7 @@ function Names({ players }: { players: SquadPlayerBrief[] }) {
   );
 }
 
-function Move({ t, gameweeks }: { t: Transfer; gameweeks: readonly number[] }) {
+function Move({ t, gameweeks, onTry }: { t: Transfer; gameweeks: readonly number[]; onTry?: (t: Transfer) => void }) {
   const label = `Sell ${t.out.map((p) => p.name).join(" and ")}, buy ${t.in.map((p) => p.name).join(" and ")}`;
   return (
     <li aria-label={label} className="rounded-lg border border-line bg-surface-2 px-3 py-2">
@@ -39,13 +39,27 @@ function Move({ t, gameweeks }: { t: Transfer; gameweeks: readonly number[] }) {
         ))}
         {t.hits > 0 && <li className="rounded bg-bad-soft px-1.5 py-px font-mono text-bad">hit −{t.hits}</li>}
         <li className="px-1 text-muted">bank after £{t.bank_after.toFixed(1)}m</li>
+        {onTry && (
+          <li className="ml-auto">
+            <button
+              type="button"
+              className="btn min-h-0 px-2 py-0.5 text-xs"
+              aria-label={`Try: ${label}`}
+              onClick={() => {
+                onTry(t);
+              }}
+            >
+              Try it
+            </button>
+          </li>
+        )}
       </ul>
     </li>
   );
 }
 
 /** Best transfers by expected points gained over the horizon, minus 4 per extra transfer. */
-export function Transfers({ analysis }: { analysis: TeamAnalysis }) {
+export function Transfers({ analysis, onTry }: { analysis: TeamAnalysis; onTry?: ((t: Transfer) => void) | undefined }) {
   const { gameweeks, transfers, transfer_pairs: pairs } = analysis;
   const best = transfers[0];
   return (
@@ -64,7 +78,7 @@ export function Transfers({ analysis }: { analysis: TeamAnalysis }) {
         ) : (
           <ol className="space-y-1.5">
             {transfers.slice(0, 5).map((t) => (
-              <Move key={`${t.out[0]?.id ?? 0}-${t.in[0]?.id ?? 0}`} t={t} gameweeks={gameweeks} />
+              <Move key={`${t.out[0]?.id ?? 0}-${t.in[0]?.id ?? 0}`} t={t} gameweeks={gameweeks} onTry={onTry} />
             ))}
           </ol>
         )}
@@ -76,7 +90,7 @@ export function Transfers({ analysis }: { analysis: TeamAnalysis }) {
           </h4>
           <ol className="space-y-1.5">
             {pairs.slice(0, 3).map((t) => (
-              <Move key={[...t.out, ...t.in].map((p) => p.id).join("-")} t={t} gameweeks={gameweeks} />
+              <Move key={[...t.out, ...t.in].map((p) => p.id).join("-")} t={t} gameweeks={gameweeks} onTry={onTry} />
             ))}
           </ol>
         </section>

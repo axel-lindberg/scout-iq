@@ -4,14 +4,28 @@
  */
 import { useSyncExternalStore } from "react";
 import type { EntryInfo, TeamContext, TeamRequest } from "../api/endpoints";
+import type { Lineup } from "./plan";
+
+/** Saved transfers and lineup on top of the original squad. Bank and free transfers are deltas. */
+export interface SavedPlan {
+  playerIds: number[];
+  lineup: Lineup;
+  /** Transfers made (players bought that weren't in the original squad). */
+  transfers: number;
+  /** £m from sales minus £m spent, at today's prices. */
+  bankDelta: number;
+}
 
 export interface SavedTeam {
   source: "fpl" | "manual";
+  /** The squad as loaded or picked by hand: what Reset goes back to. */
   playerIds: number[];
   bank: number;
   freeTransfers: number;
   /** Set when loaded by FPL team ID. */
   entry: EntryInfo | null;
+  /** Saved transfers / lineup; null = none yet. */
+  plan?: SavedPlan | null;
 }
 
 const TEAM_KEY = "scout-iq.team";
@@ -36,14 +50,33 @@ function write(key: string, value: string | null) {
   window.dispatchEvent(new Event(EVENT));
 }
 
+const isIds = (v: unknown, n: number): v is number[] =>
+  Array.isArray(v) && v.length === n && v.every((x) => Number.isInteger(x));
+
+function isPlan(v: unknown): v is SavedPlan {
+  if (typeof v !== "object" || v === null) return false;
+  const p = v as Partial<SavedPlan>;
+  const l = p.lineup;
+  return (
+    isIds(p.playerIds, 15) &&
+    typeof p.transfers === "number" &&
+    typeof p.bankDelta === "number" &&
+    typeof l === "object" &&
+    isIds(l.starters, 11) &&
+    isIds(l.bench, 4) &&
+    new Set([...l.starters, ...l.bench]).size === 15 &&
+    [...l.starters, ...l.bench].every((x) => p.playerIds?.includes(x)) &&
+    l.starters.includes(l.captain) &&
+    l.starters.includes(l.vice)
+  );
+}
+
 function isSavedTeam(v: unknown): v is SavedTeam {
   if (typeof v !== "object" || v === null) return false;
   const t = v as Partial<SavedTeam>;
   return (
     (t.source === "fpl" || t.source === "manual") &&
-    Array.isArray(t.playerIds) &&
-    t.playerIds.length === 15 &&
-    t.playerIds.every((x) => Number.isInteger(x)) &&
+    isIds(t.playerIds, 15) &&
     typeof t.bank === "number" &&
     typeof t.freeTransfers === "number"
   );
@@ -57,7 +90,13 @@ function snapshot(): SavedTeam | null {
     let value: SavedTeam | null = null;
     try {
       const parsed: unknown = raw ? JSON.parse(raw) : null;
-      value = isSavedTeam(parsed) ? { ...parsed, entry: parsed.entry ?? null } : null;
+      value = isSavedTeam(parsed)
+        ? {
+            ...parsed,
+            entry: parsed.entry ?? null,
+            plan: isPlan(parsed.plan) ? parsed.plan : null,
+          }
+        : null;
     } catch {
       value = null;
     }
@@ -91,17 +130,48 @@ export function rememberTeamId(id: string) {
   write(ID_KEY, id || null);
 }
 
-/** What the chat sends so the agent can analyse the squad. */
-export function teamContext(t: SavedTeam): TeamContext {
+/** The squad after saved transfers, with the bank and free transfers left. */
+export function currentSquad(t: SavedTeam): {
+  playerIds: number[];
+  bank: number;
+  freeTransfers: number;
+} {
+  if (!t.plan)
+    return {
+      playerIds: t.playerIds,
+      bank: t.bank,
+      freeTransfers: t.freeTransfers,
+    };
   return {
-    player_ids: t.playerIds,
-    bank: t.bank,
-    free_transfers: t.freeTransfers,
+    playerIds: t.plan.playerIds,
+    bank: Math.max(0, Math.round((t.bank + t.plan.bankDelta) * 10) / 10),
+    freeTransfers: Math.max(0, t.freeTransfers - t.plan.transfers),
+  };
+}
+
+/** What the chat sends so the agent can analyse the squad (including saved transfers). */
+export function teamContext(t: SavedTeam): TeamContext {
+  const c = currentSquad(t);
+  return {
+    player_ids: c.playerIds,
+    bank: c.bank,
+    free_transfers: c.freeTransfers,
     team_name: t.entry?.team_name ?? null,
   };
 }
 
-/** The analysis request for a saved squad (by player ids, so FPL isn't asked again). */
+/** The analysis request for a squad by player ids (sorted, so the same squad is one cache entry). */
+export function teamRequest(playerIds: readonly number[], bank: number, freeTransfers: number): TeamRequest {
+  return {
+    player_ids: [...playerIds].sort((a, b) => a - b),
+    bank: Math.max(0, bank),
+    free_transfers: Math.min(5, Math.max(0, freeTransfers)),
+    horizon: 5,
+    include_pairs: true,
+  };
+}
+
+/** The analysis request for the original squad (by player ids, so FPL isn't asked again). */
 export function requestFor(t: SavedTeam): TeamRequest {
-  return { player_ids: t.playerIds, bank: t.bank, free_transfers: t.freeTransfers, horizon: 5, include_pairs: true };
+  return teamRequest(t.playerIds, t.bank, t.freeTransfers);
 }
