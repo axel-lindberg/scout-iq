@@ -34,6 +34,12 @@ describe("my team page", () => {
       "Thomas, bench 4",
     ]);
     expect(within(within(pitch).getByRole("list", { name: "DEF" })).getAllByRole("listitem")).toHaveLength(4);
+    // Shirts by team code, the goalkeeper kit for keepers, a plain shirt when the code is unknown.
+    const shirt = (name: string) => within(pitch).getByRole("listitem", { name: new RegExp(`^${name}`) });
+    const kits = "https://fantasy.premierleague.com/dist/img/shirts/standard";
+    expect(shirt("Haaland").querySelector("img")).toHaveAttribute("src", `${kits}/shirt_43-220.webp`);
+    expect(shirt("Raya").querySelector("img")).toHaveAttribute("src", `${kits}/shirt_3_1-220.webp`);
+    expect(within(shirt("Thomas")).getByTestId("shirt-fallback")).toBeInTheDocument();
 
     // Per-gameweek table, with the blank gameweek shown.
     const table = screen.getByRole("table", { name: /Expected points per gameweek/ });
@@ -168,6 +174,8 @@ describe("my team page", () => {
 
     const { user } = renderApp("/my-team");
     expect(await screen.findByText("Sample XI")).toBeInTheDocument();
+    expect(screen.queryByLabelText("FPL team ID")).not.toBeInTheDocument(); // folded away: the team is the view
+    await user.click(screen.getByRole("button", { name: "Change team" }));
     expect(screen.getByLabelText("FPL team ID")).toHaveValue("1234567");
     await user.click(screen.getByRole("button", { name: "Forget this team" }));
     expect(screen.queryByText("Sample XI")).not.toBeInTheDocument();

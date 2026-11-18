@@ -88,6 +88,7 @@ export function MyTeamPanel() {
   const team = useSavedTeam();
   const queryClient = useQueryClient();
   const [building, setBuilding] = useState(false);
+  const [changing, setChanging] = useState(false); // load-team form open while a team is loaded
 
   const onLoaded = (a: TeamAnalysis) => {
     const t: SavedTeam = {
@@ -101,11 +102,13 @@ export function MyTeamPanel() {
     queryClient.setQueryData(queryKeys.team(requestFor(t)), a); // no second request for the same squad
     saveTeam(t);
     setBuilding(false);
+    setChanging(false);
   };
 
   const onBuilt = (ids: number[]) => {
     saveTeam({ source: "manual", playerIds: ids, bank: team?.bank ?? 0, freeTransfers: team?.freeTransfers ?? 1, entry: null, plan: null });
     setBuilding(false);
+    setChanging(false);
   };
 
   const entry = team?.entry;
@@ -123,7 +126,7 @@ export function MyTeamPanel() {
               setBuilding(false);
             }}
           />
-        ) : (
+        ) : (!team || changing) && (
           <div className="space-y-3">
             <LoadById onLoaded={onLoaded} />
             <p className="text-sm">
@@ -141,7 +144,7 @@ export function MyTeamPanel() {
           </div>
         )}
         {team && !building && (
-          <div className="mt-4 space-y-3 border-t border-line pt-3">
+          <div className={`space-y-3 ${changing ? "mt-4 border-t border-line pt-3" : ""}`}>
             <div className="flex flex-wrap items-baseline justify-between gap-2">
               <p className="text-sm">
                 {entry ? (
@@ -156,15 +159,28 @@ export function MyTeamPanel() {
                   <span className="font-semibold">Squad picked by hand</span>
                 )}
               </p>
-              <button
-                type="button"
-                className="text-xs text-muted underline underline-offset-2 hover:text-ink"
-                onClick={() => {
-                  saveTeam(null);
-                }}
-              >
-                Forget this team
-              </button>
+              <span className="flex gap-3">
+                <button
+                  type="button"
+                  className="text-xs text-muted underline underline-offset-2 hover:text-ink"
+                  aria-expanded={changing}
+                  onClick={() => {
+                    setChanging((c) => !c);
+                  }}
+                >
+                  {changing ? "Keep this team" : "Change team"}
+                </button>
+                <button
+                  type="button"
+                  className="text-xs text-muted underline underline-offset-2 hover:text-ink"
+                  onClick={() => {
+                    saveTeam(null);
+                    setChanging(false);
+                  }}
+                >
+                  Forget this team
+                </button>
+              </span>
             </div>
             <TeamSettings key={`${team.source}-${team.playerIds.join(",")}`} team={team} />
           </div>

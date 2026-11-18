@@ -41,6 +41,7 @@ My team: FPL entry endpoints (`fpl_api.fetch_entry_team`) or 15 hand-picked ids 
   pipeline, built per slot (a team plays at most once per slot) so every future fixture uses form as
   of today; double gameweeks sum, blanks are 0. `by_gw` = one row per player per gameweek. Chance of
   playing: FPL's next-GW figure, kept for later GWs unless the news gives a return date.
+  `_load_players` maps each player's team id -> FPL team `code` (`teams.csv`) as `team_code`.
 - `team.py`: deterministic squad feedback: rules check, best XI (try all 8 formations), captain,
   bench order, weakest players, exact single-transfer search, pairs (sum-of-singles estimate, then
   exact re-score). Objective: best XI + captain per GW, summed over the horizon, minus 4 per hit.
@@ -60,9 +61,9 @@ My team: FPL entry endpoints (`fpl_api.fetch_entry_team`) or 15 hand-picked ids 
 - `features/`: `predictions/`, `compare/`, `chat/`, `status/` (header + nav, model card), `team/` (load by
   ID, `SquadBuilder`, `Planner` (editable `Pitch` + `PlayerPicker`, Optimise/Save/Reset), `SquadTable`,
   `Transfers`, `TeamSettings`).
-- `components/`, `lib/`: shared UI (Card, Tooltip, AvailabilityBadge) and helpers; `lib/teamStore.ts`
-  keeps the loaded squad + saved plan in localStorage (the chat sends the planned squad); `lib/squad.ts`
-  mirrors the squad rules; `lib/plan.ts` is the pure draft logic (slots, swaps, armband, transfer count).
+- `components/` (Card, Tooltip, AvailabilityBadge, `Shirt`), `lib/`: `shirts.ts` (the only shirt URL),
+  `teamStore.ts` (loaded squad + saved plan in localStorage; the chat sends the planned squad),
+  `squad.ts` (squad rules), `plan.ts` (pure draft logic: slots, swaps, armband, transfer count).
 - `test/`: fixtures, mocked fetch (`mockApi.ts`), `renderApp()`.
 
 ## Commands
@@ -108,6 +109,8 @@ cd frontend && npm run gen:api       # after changing an API response model
 - API types: routes declare Pydantic response models; `npm run gen:api` writes `frontend/openapi.json`
   and `src/api/schema.gen.ts`; `test_committed_openapi_schema_is_current` fails if they are stale.
 - Frontend: TanStack Query for every call, Tailwind tokens from `styles.css`, accessible markup.
+- Shirts are FPL's Premier League-licensed images, hotlinked by team `code` (not id) via
+  `lib/shirts.ts`; never commit them, and swap in own SVGs there before hosting publicly.
 
 ## How Axel works
 
@@ -140,10 +143,8 @@ some experiments himself, so leave those as next steps instead of doing them.
 
 - 2026-11-11: Squared-error objective and l2 early stopping: FPL decisions need the mean, and MAE
   early stopping picked an under-trained model that shrank predictions to the median.
-- 2026-11-11: FPL's `xP` is a reference only, never a feature (possible post-deadline snapshots).
 - 2026-11-13: Current season from the official FPL API in vaastav's format; only finished gameweeks.
-- 2026-11-15: Ownership removed from the final model: same-week, previous-week and no ownership
-  were within 0.006 MAE; no ownership was marginally best (MAE 1.877).
+- 2026-11-15: Ownership dropped: same-week, previous-week and no ownership within 0.006 MAE.
 - 2026-11-15: Vite + React, not Next.js (FastAPI backend, no server rendering needed); API types
   generated from FastAPI's OpenAPI schema so backend and frontend can't drift.
 - 2026-11-17: Multi-gameweek predictions build each slot separately instead of one build with all
@@ -155,3 +156,4 @@ some experiments himself, so leave those as next steps instead of doing them.
 - 2026-11-17: Planned transfers are counted against the loaded squad, not the last save: buying a sold
   player back is free and Reset just drops the plan. Lineup points are summed in the browser (from
   `/api/players` per-GW xPts) for instant feedback; the best XI still comes only from `team.py`.
+- 2026-11-18: Shirt team code mapped in the backend from `teams.csv`; pitch is the main My team view.

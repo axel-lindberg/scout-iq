@@ -17,6 +17,9 @@
   --warn-soft: #fbf0de;
   --bad: #b3261e;
   --bad-soft: #fbe7e5;
+  --pitch: #2e8b4f;
+  --pitch-stripe: #339656;
+  --pitch-line: rgb(255 255 255 / 0.5);
   color-scheme: light;
 }
 
@@ -36,6 +39,9 @@
     --warn-soft: #33281a;
     --bad: #ef7d75;
     --bad-soft: #3a1f1e;
+    --pitch: #1d5434;
+    --pitch-stripe: #205b38;
+    --pitch-line: rgb(255 255 255 / 0.22);
     color-scheme: dark;
   }
 }
@@ -55,6 +61,7 @@
   --color-warn-soft: var(--warn-soft);
   --color-bad: var(--bad);
   --color-bad-soft: var(--bad-soft);
+  --color-pitch: var(--pitch);
 
   --font-display: "Barlow Condensed", "Arial Narrow", sans-serif;
   --font-sans: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
@@ -88,6 +95,21 @@
 }
 
 @layer components {
+  /* Mown stripes plus halfway line, centre circle and penalty boxes, drawn with gradients. */
+  .pitch {
+    background-color: var(--pitch);
+    background-image:
+      radial-gradient(circle 72px at 50% 100%, transparent 70px, var(--pitch-line) 70px 72px, transparent 72px),
+      linear-gradient(var(--pitch-line), var(--pitch-line)),
+      repeating-linear-gradient(180deg, var(--pitch) 0 48px, var(--pitch-stripe) 48px 96px);
+    background-size: 100% 100%, 100% 2px, 100% 100%;
+    background-position: 0 0, 0 100%, 0 0;
+    background-repeat: no-repeat;
+  }
+  .pitch-box {
+    border: 2px solid var(--pitch-line);
+    border-top: 0;
+  }
   .heading {
     font-family: var(--font-display);
     font-weight: 700;
