@@ -136,3 +136,33 @@ def run_totals(fd: FixtureDifficulty) -> pd.DataFrame:
     """Per team: the summed scores over the horizon (blank = 0, double = both). Index: team id."""
     tot = fd.fixtures.groupby("team_id")[list(MODES)].sum()
     return tot.reindex(fd.teams["id"]).fillna(0.0)
+
+
+def to_records(fd: FixtureDifficulty | None) -> dict:
+    """The JSON the frontend reads (also what a static export would write to fixtures.json).
+
+    Every team gets one entry per horizon gameweek: [] = blank, two fixtures = double gameweek.
+    """
+    if fd is None:
+        return {"gameweeks": [], "league_xg": DEFAULT_LEAGUE_XG, "home_factor": DEFAULT_HOME_FACTOR,
+                "half_life": HALF_LIFE, "prior_matches": PRIOR_MATCHES, "teams": []}
+    r3 = lambda x: round(float(x), 3)  # noqa: E731
+    short = fd.teams.set_index("id")["short_name"]
+    full = fd.teams.set_index("id")["name"]
+    totals = run_totals(fd)
+    by_team = {k: g for k, g in fd.fixtures.groupby("team_id")}
+    teams = []
+    for t in fd.teams.itertuples():
+        mine = by_team.get(t.id, fd.fixtures.iloc[0:0])
+        cells = [{"gameweek": gw, "fixtures": [
+            {"opponent": short.get(f.opponent_team, "?"), "opponent_name": full.get(f.opponent_team, "?"),
+             "home": bool(f.was_home), "kickoff_time": pd.Timestamp(f.kickoff_time).isoformat(),
+             "xg_for": r3(f.xg_for), "xg_against": r3(f.xg_against), "cs_chance": r3(f.cs_chance),
+             "attack": r3(f.attack), "defence": r3(f.defence), "overall": r3(f.overall)}
+            for f in mine[mine.GW == gw].itertuples()]} for gw in fd.gameweeks]
+        teams.append({"id": int(t.id), "short_name": t.short_name, "name": t.name,
+                      "code": None if pd.isna(t.code) else int(t.code),
+                      "strength": {"attack": r3(t.attack), "defence": r3(t.defence), "matches": int(t.matches)},
+                      "totals": {m: r3(totals.at[t.id, m]) for m in MODES}, "gameweeks": cells})
+    return {"gameweeks": list(fd.gameweeks), "league_xg": r3(fd.league_xg), "home_factor": r3(fd.home_factor),
+            "half_life": HALF_LIFE, "prior_matches": PRIOR_MATCHES, "teams": teams}

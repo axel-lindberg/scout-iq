@@ -38,6 +38,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/fixtures": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Fixtures */
+        get: operations["fixtures_api_fixtures_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/news": {
         parameters: {
             query?: never;
@@ -237,6 +254,59 @@ export interface components {
             /** Vice Captain */
             vice_captain: number | null;
         };
+        /** FixtureCell */
+        FixtureCell: {
+            /**
+             * Fixtures
+             * @description [] = blank gameweek, two = double gameweek
+             */
+            fixtures: components["schemas"]["RatedFixture"][];
+            /** Gameweek */
+            gameweek: number;
+        };
+        /** FixtureTeam */
+        FixtureTeam: {
+            /**
+             * Code
+             * @description FPL team code (for badges/shirts), not the id
+             */
+            code?: number | null;
+            /** Gameweeks */
+            gameweeks: components["schemas"]["FixtureCell"][];
+            /** Id */
+            id: number;
+            /** Name */
+            name: string;
+            /** Short Name */
+            short_name: string;
+            strength: components["schemas"]["TeamStrength"];
+            /** @description Scores summed over the horizon: a blank adds 0, a double both */
+            totals: components["schemas"]["RunTotals"];
+        };
+        /** FixturesResponse */
+        FixturesResponse: {
+            /** Gameweeks */
+            gameweeks: number[];
+            /**
+             * Half Life
+             * @description Matches until a past match counts half
+             */
+            half_life: number;
+            /**
+             * Home Factor
+             * @description Home xG x this, away xG / this
+             */
+            home_factor: number;
+            /** League Xg */
+            league_xg: number;
+            /**
+             * Prior Matches
+             * @description Shrinkage toward the league average, in matches
+             */
+            prior_matches: number;
+            /** Teams */
+            teams: components["schemas"]["FixtureTeam"][];
+        };
         /** GameweekPrediction */
         GameweekPrediction: {
             /** Expected Points */
@@ -401,6 +471,50 @@ export interface components {
             /** Season */
             season: string;
         };
+        /** RatedFixture */
+        RatedFixture: {
+            /**
+             * Attack
+             * @description xg_for / league average: 1 = average, higher = easier to score
+             */
+            attack: number;
+            /**
+             * Cs Chance
+             * @description Clean-sheet chance, exp(-xg_against)
+             */
+            cs_chance: number;
+            /**
+             * Defence
+             * @description cs_chance / an average fixture's: higher = easier clean sheet
+             */
+            defence: number;
+            /** Home */
+            home: boolean;
+            /** Kickoff Time */
+            kickoff_time: string;
+            /**
+             * Opponent
+             * @description Opponent short name, e.g. 'SUN'
+             */
+            opponent: string;
+            /** Opponent Name */
+            opponent_name: string;
+            /**
+             * Overall
+             * @description Mean of attack and defence
+             */
+            overall: number;
+            /**
+             * Xg Against
+             * @description Expected goals against
+             */
+            xg_against: number;
+            /**
+             * Xg For
+             * @description Expected goals for the team in this match
+             */
+            xg_for: number;
+        };
         /** RecentForm */
         RecentForm: {
             /** Avg Minutes Last3 */
@@ -413,6 +527,15 @@ export interface components {
             matches_played: number;
             /** Season Avg Points */
             season_avg_points: number | null;
+        };
+        /** RunTotals */
+        RunTotals: {
+            /** Attack */
+            attack: number;
+            /** Defence */
+            defence: number;
+            /** Overall */
+            overall: number;
         };
         /** SquadPlayer */
         SquadPlayer: {
@@ -623,6 +746,21 @@ export interface components {
              */
             team_id?: number | null;
         };
+        /** TeamStrength */
+        TeamStrength: {
+            /**
+             * Attack
+             * @description xG created per match at a neutral ground (recency-weighted, shrunk)
+             */
+            attack: number;
+            /**
+             * Defence
+             * @description xG conceded per match at a neutral ground
+             */
+            defence: number;
+            /** Matches */
+            matches: number;
+        };
         /** ToolCall */
         ToolCall: {
             /**
@@ -753,6 +891,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    fixtures_api_fixtures_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FixturesResponse"];
                 };
             };
         };

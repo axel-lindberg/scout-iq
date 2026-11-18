@@ -21,6 +21,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from . import fpl_api
 from .data import ROOT
+from .difficulty import to_records as difficulty_records
 from .tools import ScoutTools, TeamError
 from .upcoming import HORIZON, Upcoming
 
@@ -261,6 +262,58 @@ class PlayersResponse(BaseModel):
     players: list[PlayerOption]
 
 
+
+# ---- fixture difficulty ---------------------------------------------------------------------
+
+class RatedFixture(BaseModel):
+    opponent: str = Field(description="Opponent short name, e.g. 'SUN'")
+    opponent_name: str
+    home: bool
+    kickoff_time: str
+    xg_for: float = Field(description="Expected goals for the team in this match")
+    xg_against: float = Field(description="Expected goals against")
+    cs_chance: float = Field(description="Clean-sheet chance, exp(-xg_against)")
+    attack: float = Field(description="xg_for / league average: 1 = average, higher = easier to score")
+    defence: float = Field(description="cs_chance / an average fixture's: higher = easier clean sheet")
+    overall: float = Field(description="Mean of attack and defence")
+
+
+class FixtureCell(BaseModel):
+    gameweek: int
+    fixtures: list[RatedFixture] = Field(description="[] = blank gameweek, two = double gameweek")
+
+
+class TeamStrength(BaseModel):
+    attack: float = Field(description="xG created per match at a neutral ground (recency-weighted, shrunk)")
+    defence: float = Field(description="xG conceded per match at a neutral ground")
+    matches: int
+
+
+class RunTotals(BaseModel):
+    overall: float
+    attack: float
+    defence: float
+
+
+class FixtureTeam(BaseModel):
+    id: int
+    short_name: str
+    name: str
+    code: int | None = Field(None, description="FPL team code (for badges/shirts), not the id")
+    strength: TeamStrength
+    totals: RunTotals = Field(description="Scores summed over the horizon: a blank adds 0, a double both")
+    gameweeks: list[FixtureCell]
+
+
+class FixturesResponse(BaseModel):
+    gameweeks: list[int]
+    league_xg: float
+    home_factor: float = Field(description="Home xG x this, away xG / this")
+    half_life: float = Field(description="Matches until a past match counts half")
+    prior_matches: float = Field(description="Shrinkage toward the league average, in matches")
+    teams: list[FixtureTeam]
+
+
 def _model_card() -> dict:
     """Headline evaluation numbers from Day 2, read from results/ if they exist."""
     scores, picks = ROOT / "results" / "day2_scores.csv", ROOT / "results" / "day2_picks.csv"
@@ -361,6 +414,12 @@ def create_app(upcoming: Upcoming, tools: ScoutTools,
         except Exception as e:                          # OpenAI down, bad key, rate limit...
             raise HTTPException(502, f"The language model call failed: {type(e).__name__}") from e
         return ChatResponse(session_id=sid, answer=answer, tools=agent.trace)
+
+    fixtures_payload = difficulty_records(getattr(upcoming, "difficulty", None))   # same for everyone
+
+    @app.get("/api/fixtures", response_model=FixturesResponse)
+    def fixtures():
+        return fixtures_payload
 
     @app.get("/api/players", response_model=PlayersResponse)
     def players():
