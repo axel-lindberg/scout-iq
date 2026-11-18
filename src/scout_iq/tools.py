@@ -31,6 +31,12 @@ LIMITATIONS = [
 ]
 
 
+
+def _team_code(r: pd.Series) -> int | None:
+    """FPL team code (for shirt images), None if unknown."""
+    code = r.get("team_code")
+    return None if code is None or pd.isna(code) else int(code)
+
 class TeamError(ValueError):
     """The squad breaks the rules; .errors lists why."""
 
@@ -201,7 +207,7 @@ class ScoutTools:
         for e, r in info.iterrows():
             x = self.pool.xpts[self.pool.row[e]]
             out.append({"id": int(e), "name": r["web_name"], "full_name": r["name"], "team": r["team_short"],
-                        "position": r["position"], "price": float(r["price"]),
+                        "team_code": _team_code(r), "position": r["position"], "price": float(r["price"]),
                         "status": r.get("status_text", r.get("status", "")),
                         "availability": team_mod.availability_flag(r),
                         "expected_points": [round(float(v), 2) for v in x],
@@ -213,7 +219,8 @@ class ScoutTools:
         r = self.pool.info.loc[e]
         x = self.pool.xpts[self.pool.row[e], :horizon]
         chance = team_mod.availability_flag(r)
-        return {"id": int(e), "name": r["web_name"], "team": r["team_short"], "position": r["position"],
+        return {"id": int(e), "name": r["web_name"], "team": r["team_short"], "team_code": _team_code(r),
+                "position": r["position"],
                 "price": float(r["price"]), "availability": chance, "news": r.get("news") or None,
                 "expected_points": [round(float(v), 2) for v in x],
                 "expected_points_horizon_adjusted": round(float(x.sum()), 2)}

@@ -258,6 +258,8 @@ def test_team_analyze_by_player_ids():
     assert best["gain_per_gameweek"] == [8.0, 8.0] and best["net_gain"] == 16.0 and best["hits"] == 0
     assert a["weakest"][0]["name"] == "WeakMid"
     assert any("Selling prices" in x for x in a["limitations"])
+    gk1 = next(s for s in a["squad"] if s["name"] == "Gk1")
+    assert gk1["team_code"] == 101 and best["in"][0]["team_code"] == 120      # GoodMid plays for team 20
 
 
 def test_team_analyze_validation_errors():
@@ -303,8 +305,9 @@ def test_players_list_for_manual_picking():
     body = c.get("/api/players").json()
     players = body["players"]
     assert {p["id"] for p in players} >= set(ids) and players[0]["name"] == "StarFwd"   # 20 pts over 2 GWs
-    assert set(players[0]) == {"id", "name", "full_name", "team", "position", "price", "status", "availability",
-                               "expected_points", "fixtures", "expected_points_horizon_adjusted"}
+    assert set(players[0]) == {"id", "name", "full_name", "team", "team_code", "position", "price", "status",
+                               "availability", "expected_points", "fixtures", "expected_points_horizon_adjusted"}
+    assert players[0]["team_code"] == 122                                              # team id 22 -> code 122
     assert body["gameweeks"] == [11, 12]
     assert players[0]["expected_points"] == [10.0, 10.0] and players[0]["fixtures"] == ["T99 (H)", "T99 (H)"]
     assert players[0]["availability"] == "fit"

@@ -144,10 +144,15 @@ class ChatResponse(BaseModel):
 
 # ---- my team -----------------------------------------------------------------------
 
+def _team_code_field():
+    return Field(None, description="FPL team code (not the team id): the key for shirt images")
+
+
 class SquadPlayerBrief(BaseModel):
     id: int
     name: str
     team: str
+    team_code: int | None = _team_code_field()
     position: str
     price: float = Field(description="Today's price in £m (selling prices aren't public)")
     availability: Literal["fit", "doubtful", "out"]
@@ -241,6 +246,7 @@ class PlayerOption(BaseModel):
     name: str
     full_name: str
     team: str
+    team_code: int | None = _team_code_field()
     position: str
     price: float
     status: str
