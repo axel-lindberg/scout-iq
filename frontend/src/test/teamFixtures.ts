@@ -119,6 +119,9 @@ export function teamAnalysis(overrides: Partial<TeamAnalysis> = {}): TeamAnalysi
   };
 }
 
+/** FPL team codes (not ids) for some fixture teams. */
+const TEAM_CODES: Record<string, number> = { ARS: 3, MCI: 43, LIV: 14, CHE: 8, BUR: 90 };
+
 /** Players to buy (also in the transfer suggestions). */
 const BUYS: [number, string, string, string, number, number][] = [
   [50, "Barry", "EVE", "MID", 5.4, 4.6],
@@ -144,6 +147,7 @@ export function playerOptions(): PlayersResponse {
       team,
       position,
       price,
+      team_code: TEAM_CODES[team] ?? null, // Coventry (COV) has none here: the plain shirt
       status: name === "Saka" ? "doubtful" : "available",
       availability: name === "Saka" ? ("doubtful" as const) : ("fit" as const),
       expected_points: GWS.map(() => x),

@@ -12,8 +12,9 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from scout_iq.features import build_features, feature_columns  # noqa: E402
+from scout_iq import upcoming as upcoming_mod  # noqa: E402
 from scout_iq.upcoming import (  # noqa: E402
-    Upcoming, _placeholder_rows, assign_slots, fixture_chance, horizon_gameweeks, return_date,
+    Upcoming, _load_players, _placeholder_rows, assign_slots, fixture_chance, horizon_gameweeks, return_date,
     summarise, upcoming_features)
 
 SEASON = "2026-27"
@@ -150,3 +151,18 @@ def test_upcoming_without_per_gameweek_table_still_works():
                       "fixtures": ["AAA (H)"]})
     up = Upcoming(SEASON, 7, pd.Timestamp("2026-10-17", tz="UTC"), p, p)
     assert up.gameweeks == [7] and up.by_gw.iloc[0]["xpts_adjusted"] == 1.0
+
+
+def test_players_get_the_team_code_not_the_team_id(tmp_path, monkeypatch):
+    # FPL: a player's `team` is the team id; shirts are keyed by the team's `code` from teams.csv.
+    d = tmp_path / SEASON
+    d.mkdir()
+    pd.DataFrame({"id": [1, 2], "code": [3, 7], "name": ["Arsenal", "Aston Villa"],
+                  "short_name": ["ARS", "AVL"]}).to_csv(d / "teams.csv", index=False)
+    pd.DataFrame({"id": [10, 11], "team": [2, 1], "first_name": ["A", "B"], "second_name": ["X", "Y"],
+                  "web_name": ["X", "Y"], "element_type": [3, 1], "now_cost": [55, 60], "status": "a",
+                  "news": ""}).to_csv(d / "players_raw.csv", index=False)
+    monkeypatch.setattr(upcoming_mod, "RAW_DIR", tmp_path)
+    p = _load_players(SEASON).set_index("element")
+    assert p.loc[10, "team_short"] == "AVL" and p.loc[10, "team_code"] == 7
+    assert p.loc[11, "team_code"] == 3

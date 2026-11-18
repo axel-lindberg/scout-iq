@@ -637,6 +637,18 @@
           "team": {
             "title": "Team",
             "type": "string"
+          },
+          "team_code": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "FPL team code (not the team id): the key for shirt images",
+            "title": "Team Code"
           }
         },
         "required": [
@@ -878,6 +890,18 @@
           "team": {
             "title": "Team",
             "type": "string"
+          },
+          "team_code": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "FPL team code (not the team id): the key for shirt images",
+            "title": "Team Code"
           }
         },
         "required": [
@@ -956,6 +980,18 @@
           "team": {
             "title": "Team",
             "type": "string"
+          },
+          "team_code": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "FPL team code (not the team id): the key for shirt images",
+            "title": "Team Code"
           }
         },
         "required": [

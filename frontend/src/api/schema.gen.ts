@@ -374,6 +374,11 @@ export interface components {
             status: string;
             /** Team */
             team: string;
+            /**
+             * Team Code
+             * @description FPL team code (not the team id): the key for shirt images
+             */
+            team_code?: number | null;
         };
         /** PlayersResponse */
         PlayersResponse: {
@@ -457,6 +462,11 @@ export interface components {
             status: string;
             /** Team */
             team: string;
+            /**
+             * Team Code
+             * @description FPL team code (not the team id): the key for shirt images
+             */
+            team_code?: number | null;
         };
         /** SquadPlayerBrief */
         SquadPlayerBrief: {
@@ -487,6 +497,11 @@ export interface components {
             price: number;
             /** Team */
             team: string;
+            /**
+             * Team Code
+             * @description FPL team code (not the team id): the key for shirt images
+             */
+            team_code?: number | null;
         };
         /** StatusResponse */
         StatusResponse: {

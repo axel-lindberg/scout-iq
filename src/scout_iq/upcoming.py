@@ -74,9 +74,12 @@ def _load_players(season: str) -> pd.DataFrame:
     p["price"] = p["now_cost"] / 10.0
     p["team_name"] = p["team_id"].map(teams["name"])
     p["team_short"] = p["team_id"].map(teams["short_name"])
+    # FPL's kit/badge id. A player's `team` is the team *id* (1-20, by alphabet each season); the
+    # shirt images use the team *code* (stable across seasons, e.g. Arsenal 3), so map id -> code.
+    p["team_code"] = p["team_id"].map(teams["code"]).astype("Int64") if "code" in teams else pd.NA
     p["status_text"] = p["status"].map(STATUS).fillna(p["status"])
     p["news"] = p["news"].fillna("")
-    keep = ["element", "name", "web_name", "position", "team_id", "team_name", "team_short", "price",
+    keep = ["element", "name", "web_name", "position", "team_id", "team_name", "team_short", "team_code", "price",
             "status", "status_text", "chance_of_playing_next_round", "news", "news_added",
             "selected_by_percent", "total_points", "form"]
     return p[[c for c in keep if c in p.columns]]

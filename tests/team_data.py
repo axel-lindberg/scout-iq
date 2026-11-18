@@ -24,6 +24,7 @@ def universe(extra: list[tuple] | None = None, squad: list[tuple] | None = None)
                                           "status", "chance_of_playing_next_round", "news"])
     players["name"] = players["web_name"] + " Fullname"
     players["team_short"] = "T" + players["team_id"].astype(str)
+    players["team_code"] = players["team_id"] + 100   # codes differ from ids, like in FPL
     players["team_name"] = "Team " + players["team_id"].astype(str)
     players["status_text"] = players["status"].map({"a": "available", "d": "doubtful", "i": "injured"})
     by_gw = pd.DataFrame([
