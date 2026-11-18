@@ -75,11 +75,14 @@ Predictions for unplayed gameweeks reuse the same pipeline: append a "not yet pl
 
 **Limitations, shown in the app:** selling prices aren't public (FPL keeps half of any price rise), so players are valued at today's price and the bank is editable; free transfers are an estimate you can override; transfers made since the last deadline aren't public yet; bench points and auto-subs are ignored; planned transfers live only in your browser (make them in the FPL app).
 
-**6. App.** A FastAPI backend (`/api/status`, `/api/predictions` (`horizon=1-5`, `rank_by`), `/api/compare`, `/api/news`, `/api/players`, `POST /api/team/analyze`, `POST /api/chat` with per-session memory and an optional `team`; interactive docs at `/docs`) and a **React + TypeScript** frontend in `frontend/`, built with Vite:
+**Fixture difficulty** (`difficulty.py`) uses our own xG data, not FPL's rating (its attack/defence strengths are 0 this season). Each team gets an attack strength (xG created per match) and a defence strength (xG conceded), made venue-neutral with one league-wide home factor (home teams create about 15% more xG), weighted toward recent matches (half-life 12 matches) and shrunk toward the league average by 5 imaginary average matches. Those two settings were picked on 2024-25 by how well they predict a team's xG in its next match, and checked on 2025-26; weighting only the last few matches without shrinkage was clearly worse. A fixture's **attack** score is the expected goals for against the league average, **defense** is the clean-sheet chance (`exp(-xG against)`) against an average fixture's, and **overall** is their mean, so 1.00 is an average fixture. A run is the **sum** over the five gameweeks, so a double gameweek counts twice and a blank adds nothing, as in FPL. The ratings are computed once at startup like the predictions, so `/api/fixtures` could equally be a static JSON file.
+
+**6. App.** A FastAPI backend (`/api/status`, `/api/predictions` (`horizon=1-5`, `rank_by`), `/api/compare`, `/api/news`, `/api/players`, `/api/fixtures`, `POST /api/team/analyze`, `POST /api/chat` with per-session memory and an optional `team`; interactive docs at `/docs`) and a **React + TypeScript** frontend in `frontend/`, built with Vite:
 
 - **Predictions table** with the next gameweek plus the four after it (faded: less certain), a five-gameweek total and a rank-by toggle, position, price and team filters (typed filters are debounced), an expected-points bar and an availability badge whose tooltip shows the official injury news.
 - **Compare** 2-4 players side by side: expected points, recent form, minutes, xGI, season average and availability. Names the backend can't resolve are shown as *ambiguous* (with the candidates) or *not found* instead of silently disappearing.
 - **My team** page: load by team ID (remembered in the browser) or build the squad by hand with the rules checked as you go; plan transfers, substitutions and the captain directly on the pitch with live predicted points, free transfers left, hits and bank (Optimise / Save / Reset); expected points per gameweek, weakest players, transfer suggestions with the gain per gameweek (each can be tried on the pitch), editable bank and free transfers.
+- **Fixtures** page: every team's next five gameweeks coloured from very easy to very hard, with doubles stacked and blanks marked, and the expected goals behind each colour on hover. Rate by Overall, Attack or Defense, sort runs easiest or hardest first, and pick teams to compare; the view is kept in the URL so a comparison can be shared.
 - **Chat** with the agent (it knows your loaded team), which keeps the session id so it remembers the conversation and shows the tools it called (name and arguments) under each answer.
 - Light and dark mode from the system setting, works down to phone width, fully keyboard usable, respects reduced motion.
 
@@ -170,6 +173,7 @@ src/scout_iq/evaluate.py     baselines, MAE/RMSE, per-gameweek error
 src/scout_iq/model.py        LightGBM, hyperparameter search, walk-forward evaluation
 src/scout_iq/fpl_metrics.py  captain and top-11 pick quality, rank correlation
 src/scout_iq/upcoming.py     predictions for the next 5 (unplayed) gameweeks
+src/scout_iq/difficulty.py   fixture difficulty from xG (attack, defence, overall per fixture)
 src/scout_iq/team.py         best XI, captain, weakest players, transfer search (deterministic)
 src/scout_iq/news.py         RAG over injury news (OpenAI embeddings, cosine similarity)
 src/scout_iq/tools.py        the agent's tools + JSON schemas, strict name matching
@@ -178,7 +182,7 @@ src/scout_iq/api.py          FastAPI backend: routes, response models, serves fr
 frontend/                    React + TypeScript web app (Vite)
   src/api/                   fetch client, TanStack Query hooks, generated OpenAPI types
   src/app/                   routes and page layout (add new pages in routes.tsx)
-  src/features/              predictions, compare, chat, my team, status header and model card
+  src/features/              predictions, compare, fixtures, chat, my team, status header and model card
   src/components/, src/lib/  shared UI (badge, tooltip, card) and helpers
   openapi.json               API schema snapshot the types are generated from
 scripts/                     download, build, evaluate, train, serve, ask, weekly update, API-vs-vaastav check,

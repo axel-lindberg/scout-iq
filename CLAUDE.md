@@ -26,6 +26,7 @@ model without ownership; source `results/day2_scores.csv`, `results/day2_picks.c
 Data flow: FPL API (current season) / vaastav repo (past seasons) -> `data/raw/<season>/` (vaastav's
 CSV format) -> `features.py` -> LightGBM (`models/lgbm.txt`) -> `upcoming.py` (predictions for the
 next 5 gameweeks) -> `tools.py` / `agent.py` -> `api.py` (FastAPI) -> React app in `frontend/`.
+Fixture difficulty: played matches' xG -> `difficulty.py` (inside `predict_upcoming`) -> `/api/fixtures`.
 My team: FPL entry endpoints (`fpl_api.fetch_entry_team`) or 15 hand-picked ids -> `team.py`
 (per-GW xPts from `Upcoming.by_gw`) -> `POST /api/team/analyze` and the agent's `analyze_my_team`.
 
@@ -42,6 +43,8 @@ My team: FPL entry endpoints (`fpl_api.fetch_entry_team`) or 15 hand-picked ids 
   of today; double gameweeks sum, blanks are 0. `by_gw` = one row per player per gameweek. Chance of
   playing: FPL's next-GW figure, kept for later GWs unless the news gives a return date.
   `_load_players` maps each player's team id -> FPL team `code` (`teams.csv`) as `team_code`.
+- `difficulty.py`: per-fixture attack / defence / overall scores (1.0 = average) from opponents'
+  venue-neutral, recency-weighted, shrunk xG; `to_records()` = the `/api/fixtures` JSON.
 - `team.py`: deterministic squad feedback: rules check, best XI (try all 8 formations), captain,
   bench order, weakest players, exact single-transfer search, pairs (sum-of-singles estimate, then
   exact re-score). Objective: best XI + captain per GW, summed over the horizon, minus 4 per hit.
@@ -51,19 +54,19 @@ My team: FPL entry endpoints (`fpl_api.fetch_entry_team`) or 15 hand-picked ids 
 - `agent.py`: tool-calling loop, system prompt, optional LangSmith tracing; `ask(q, team=...)` adds a
   system note when the user's squad changes and passes it to `analyze_my_team`.
 - `api.py`: FastAPI routes + Pydantic response models; serves `frontend/dist/`. Stateless except chat
-  sessions: `/api/team/analyze` takes `team_id` or `player_ids` each time; `/api/players`.
+  sessions: `/api/team/analyze` takes `team_id` or `player_ids` each time; `/api/players`, `/api/fixtures`.
 
 `frontend/src/`
 - `api/`: `client.ts` (fetch + ApiError), `endpoints.ts` (one function per route), `queries.ts`
   (TanStack Query hooks), `schema.gen.ts` (generated, never edit by hand).
 - `app/`: `routes.tsx` (all pages), `Layout.tsx` (header + outlet).
-- `pages/`: `ScoutPage` (predictions + chat), `MyTeamPage` (team + chat), `NotFoundPage`.
-- `features/`: `predictions/`, `compare/`, `chat/`, `status/` (header + nav, model card), `team/` (load by
-  ID, `SquadBuilder`, `Planner` (editable `Pitch` + `PlayerPicker`, Optimise/Save/Reset), `SquadTable`,
-  `Transfers`, `TeamSettings`).
+- `pages/`: `ScoutPage` (predictions + chat), `MyTeamPage` (team + chat), `FixturesPage`, `NotFoundPage`.
+- `features/`: `predictions/`, `compare/`, `chat/`, `fixtures/` (table + `TeamPicker`), `status/`, `team/`
+  (load by ID, `SquadBuilder`, `Planner` = editable `Pitch` + `PlayerPicker`, `SquadTable`, `Transfers`).
 - `components/` (Card, Tooltip, AvailabilityBadge, `Shirt`), `lib/`: `shirts.ts` (the only shirt URL),
   `teamStore.ts` (loaded squad + saved plan in localStorage; the chat sends the planned squad),
-  `squad.ts` (squad rules), `plan.ts` (pure draft logic: slots, swaps, armband, transfer count).
+  `squad.ts` (squad rules), `plan.ts` (pure draft logic: slots, swaps, armband, transfer count),
+  `difficulty.ts` (5 colour steps (`--fdr-*` tokens), sorting, URL state).
 - `test/`: fixtures, mocked fetch (`mockApi.ts`), `renderApp()`.
 
 ## Commands
@@ -74,15 +77,13 @@ cd frontend && npm ci                                            # setup (Node 2
 python scripts/download_data.py      # past seasons + current season
 python scripts/update.py             # weekly, after a gameweek finishes: download, rebuild, retrain
 python scripts/update.py --quick     # prices, status and news only
-python scripts/build_dataset.py      # -> data/processed/features.parquet
-python scripts/evaluate_baseline.py  # -> results/day1_baseline.md
+python scripts/build_dataset.py      # -> data/processed/features.parquet (evaluate_baseline.py: baselines)
 python scripts/train_evaluate.py     # tune, walk-forward, save model -> results/day2_*, models/
 python scripts/train_evaluate.py --experiment NAME   # writes results/experiments/NAME/, model untouched
 python scripts/serve.py              # API (+ built app) on :8000; reads data once at startup
 cd frontend && npm run dev           # dev UI on :5173, proxies /api to :8000
-cd frontend && npm run build         # production build -> frontend/dist/ (served by serve.py)
 pytest -q                            # backend tests, no network or API key
-cd frontend && npm run typecheck && npm run lint && npm run test && npm run build
+cd frontend && npm run typecheck && npm run lint && npm run test && npm run build   # build -> dist/
 cd frontend && npm run gen:api       # after changing an API response model
 ```
 
@@ -122,6 +123,7 @@ some experiments himself, so leave those as next steps instead of doing them.
 ## Current status
 
 - Predictions cover the next 5 gameweeks (`/api/predictions?horizon=5`, faded columns in the table).
+- Fixtures page (`/fixtures`): difficulty by Overall/Attack/Defense, sortable, team comparison.
 - My team page + `analyze_my_team` + transfer planner on the pitch (sell ×, buy +, subs, captain,
   Optimise/Save/Reset), all checked on Axel's real team (2026-11-17). Unsaved drafts aren't persisted.
 - Known limits: no selling prices (public API), free transfers estimated, the agent sometimes adds
@@ -145,15 +147,17 @@ some experiments himself, so leave those as next steps instead of doing them.
   early stopping picked an under-trained model that shrank predictions to the median.
 - 2026-11-13: Current season from the official FPL API in vaastav's format; only finished gameweeks.
 - 2026-11-15: Ownership dropped: same-week, previous-week and no ownership within 0.006 MAE.
-- 2026-11-15: Vite + React, not Next.js (FastAPI backend, no server rendering needed); API types
-  generated from FastAPI's OpenAPI schema so backend and frontend can't drift.
+- 2026-11-15: Vite + React, not Next.js (no server rendering needed); API types from OpenAPI.
 - 2026-11-17: Multi-gameweek predictions build each slot separately instead of one build with all
   future rows, which would count unplayed matches inside the rolling windows. Next-GW output unchanged.
 - 2026-11-17: Team optimisation in Python, not the LLM: hard rules (formation, budget, club limit)
   must always hold and the answer must be reproducible and testable.
-- 2026-11-17: Team endpoint stateless (team_id or player_ids per request); the frontend keeps the
-  squad in localStorage and sends it with chat messages.
+- 2026-11-17: Team endpoint stateless; the frontend keeps the squad in localStorage.
 - 2026-11-17: Planned transfers are counted against the loaded squad, not the last save: buying a sold
   player back is free and Reset just drops the plan. Lineup points are summed in the browser (from
   `/api/players` per-GW xPts) for instant feedback; the best XI still comes only from `team.py`.
 - 2026-11-18: Shirt team code mapped in the backend from `teams.csv`; pitch is the main My team view.
+- 2026-11-18: Fixture difficulty from our own xG, not FPL (strength_attack/defence are 0 this season)
+  or the model's `opp_*_last5` (noisy, ~3% of gain). Half-life 12 matches + shrinkage 5 tuned on
+  2024-25 (next-match xG MSE 0.653 vs 0.704 for last-3 unshrunk); FPL `strength_overall` only before
+  any match. Runs are summed, not averaged: a double counts twice and a blank adds 0.
