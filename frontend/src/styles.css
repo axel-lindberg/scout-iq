@@ -28,9 +28,9 @@
   --fdr-2-ink: #0f3320;
   --fdr-3: #e3e6e2;
   --fdr-3-ink: #15181d;
-  --fdr-4: #f3bcb6;
-  --fdr-4-ink: #4a0f0b;
-  --fdr-5: #8f1d17;
+  --fdr-4: #ff1751;
+  --fdr-4-ink: #1a0005;
+  --fdr-5: #80072d;
   --fdr-5-ink: #ffffff;
   color-scheme: light;
 }
@@ -61,10 +61,10 @@
     --fdr-2-ink: #062213;
     --fdr-3: #3a434c;
     --fdr-3-ink: #eef1f4;
-    --fdr-4: #5c2723;
-    --fdr-4-ink: #ffdcd8;
-    --fdr-5: #7a1510;
-    --fdr-5-ink: #ffe3e0;
+    --fdr-4: #ff1751;
+    --fdr-4-ink: #1a0005;
+    --fdr-5: #80072d;
+    --fdr-5-ink: #ffffff;
     color-scheme: dark;
   }
 }
