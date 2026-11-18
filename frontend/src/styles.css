@@ -20,7 +20,8 @@
   --pitch: #2e8b4f;
   --pitch-stripe: #339656;
   --pitch-line: rgb(255 255 255 / 0.5);
-  /* Fixture difficulty, 1 = very easy ... 5 = very hard; each fill has its own text colour (>= 4.5:1). */
+  /* Fixture difficulty, 1 = very easy ... 5 = very hard (darkest = most extreme); each fill has its
+     own text colour (>= 4.5:1). */
   --fdr-1: #1d7a47;
   --fdr-1-ink: #ffffff;
   --fdr-2: #bfe3cb;
@@ -53,16 +54,17 @@
     --pitch: #1d5434;
     --pitch-stripe: #205b38;
     --pitch-line: rgb(255 255 255 / 0.22);
-    --fdr-1: #3d9c68;
-    --fdr-1-ink: #04140b;
-    --fdr-2: #1e4a31;
-    --fdr-2-ink: #d6f1e0;
-    --fdr-3: #2b333b;
-    --fdr-3-ink: #e7ebef;
-    --fdr-4: #5c2723;
-    --fdr-4-ink: #ffdcd8;
-    --fdr-5: #b3362e;
-    --fdr-5-ink: #ffffff;
+    /* As in light mode, the darkest shades are the extremes: deep green = very easy, deep red = very hard. */
+    --fdr-1: #0f5a32;
+    --fdr-1-ink: #e3f7ea;
+    --fdr-2: #5fb985;
+    --fdr-2-ink: #062213;
+    --fdr-3: #3a434c;
+    --fdr-3-ink: #eef1f4;
+    --fdr-4: #e08a82;
+    --fdr-4-ink: #3a0a07;
+    --fdr-5: #7a1510;
+    --fdr-5-ink: #ffe3e0;
     color-scheme: dark;
   }
 }
