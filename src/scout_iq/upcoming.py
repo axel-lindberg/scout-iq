@@ -27,6 +27,7 @@ import numpy as np
 import pandas as pd
 
 from .data import RAW_DIR, ROOT, available_seasons, load_all
+from .difficulty import FixtureDifficulty, fixture_difficulty
 from .features import build_features
 
 MODEL_PATH = ROOT / "models" / "lgbm.txt"
@@ -49,6 +50,7 @@ class Upcoming:
     last_played_gw: int = 0    # latest gameweek with results in the data (shows how fresh it is)
     gameweeks: list[int] = field(default_factory=list)  # the horizon, e.g. [11, 12, 13, 14, 15]
     by_gw: pd.DataFrame | None = None  # one row per player per horizon gameweek (0 = blank)
+    difficulty: FixtureDifficulty | None = None  # every team's upcoming fixtures, rated (difficulty.py)
 
     def __post_init__(self):
         if not self.gameweeks:
@@ -266,13 +268,14 @@ def predict_upcoming(season: str | None = None, horizon: int = HORIZON,
     rows["xpts_fixture"] = predict(rows[features])
     rows["chance"] = fixture_chance(rows, players, gameweeks[0]).to_numpy()
 
-    teams = pd.read_csv(RAW_DIR / season / "teams.csv").set_index("id")["short_name"]
-    out, by_gw = summarise(rows, players, teams, gameweeks)
+    teams_csv = pd.read_csv(RAW_DIR / season / "teams.csv")
+    out, by_gw = summarise(rows, players, teams_csv.set_index("id")["short_name"], gameweeks)
     first = rows[rows.GW == gameweeks[0]]
     return Upcoming(season=season, gameweek=gameweeks[0], deadline=first["kickoff_time"].min(),
                     predictions=out, players=players,
                     last_played_gw=int(played["GW"].max()) if len(played) else 0,
-                    gameweeks=gameweeks, by_gw=by_gw)
+                    gameweeks=gameweeks, by_gw=by_gw,
+                    difficulty=fixture_difficulty(played, fixtures, teams_csv, gameweeks))
 
 
 def predict_next_gameweek(season: str | None = None, horizon: int = HORIZON) -> Upcoming:

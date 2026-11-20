@@ -329,6 +329,127 @@
         "title": "EntryInfo",
         "type": "object"
       },
+      "FixtureCell": {
+        "properties": {
+          "fixtures": {
+            "description": "[] = blank gameweek, two = double gameweek",
+            "items": {
+              "$ref": "#/components/schemas/RatedFixture"
+            },
+            "title": "Fixtures",
+            "type": "array"
+          },
+          "gameweek": {
+            "title": "Gameweek",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "gameweek",
+          "fixtures"
+        ],
+        "title": "FixtureCell",
+        "type": "object"
+      },
+      "FixtureTeam": {
+        "properties": {
+          "code": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "FPL team code (for badges/shirts), not the id",
+            "title": "Code"
+          },
+          "gameweeks": {
+            "items": {
+              "$ref": "#/components/schemas/FixtureCell"
+            },
+            "title": "Gameweeks",
+            "type": "array"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "short_name": {
+            "title": "Short Name",
+            "type": "string"
+          },
+          "strength": {
+            "$ref": "#/components/schemas/TeamStrength"
+          },
+          "totals": {
+            "$ref": "#/components/schemas/RunTotals",
+            "description": "Scores summed over the horizon: a blank adds 0, a double both"
+          }
+        },
+        "required": [
+          "id",
+          "short_name",
+          "name",
+          "strength",
+          "totals",
+          "gameweeks"
+        ],
+        "title": "FixtureTeam",
+        "type": "object"
+      },
+      "FixturesResponse": {
+        "properties": {
+          "gameweeks": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Gameweeks",
+            "type": "array"
+          },
+          "half_life": {
+            "description": "Matches until a past match counts half",
+            "title": "Half Life",
+            "type": "number"
+          },
+          "home_factor": {
+            "description": "Home xG x this, away xG / this",
+            "title": "Home Factor",
+            "type": "number"
+          },
+          "league_xg": {
+            "title": "League Xg",
+            "type": "number"
+          },
+          "prior_matches": {
+            "description": "Shrinkage toward the league average, in matches",
+            "title": "Prior Matches",
+            "type": "number"
+          },
+          "teams": {
+            "items": {
+              "$ref": "#/components/schemas/FixtureTeam"
+            },
+            "title": "Teams",
+            "type": "array"
+          }
+        },
+        "required": [
+          "gameweeks",
+          "league_xg",
+          "home_factor",
+          "half_life",
+          "prior_matches",
+          "teams"
+        ],
+        "title": "FixturesResponse",
+        "type": "object"
+      },
       "GameweekPrediction": {
         "properties": {
           "expected_points": {
@@ -732,6 +853,71 @@
         "title": "PredictionsResponse",
         "type": "object"
       },
+      "RatedFixture": {
+        "properties": {
+          "attack": {
+            "description": "xg_for / league average: 1 = average, higher = easier to score",
+            "title": "Attack",
+            "type": "number"
+          },
+          "cs_chance": {
+            "description": "Clean-sheet chance, exp(-xg_against)",
+            "title": "Cs Chance",
+            "type": "number"
+          },
+          "defence": {
+            "description": "cs_chance / an average fixture's: higher = easier clean sheet",
+            "title": "Defence",
+            "type": "number"
+          },
+          "home": {
+            "title": "Home",
+            "type": "boolean"
+          },
+          "kickoff_time": {
+            "title": "Kickoff Time",
+            "type": "string"
+          },
+          "opponent": {
+            "description": "Opponent short name, e.g. 'SUN'",
+            "title": "Opponent",
+            "type": "string"
+          },
+          "opponent_name": {
+            "title": "Opponent Name",
+            "type": "string"
+          },
+          "overall": {
+            "description": "Mean of attack and defence",
+            "title": "Overall",
+            "type": "number"
+          },
+          "xg_against": {
+            "description": "Expected goals against",
+            "title": "Xg Against",
+            "type": "number"
+          },
+          "xg_for": {
+            "description": "Expected goals for the team in this match",
+            "title": "Xg For",
+            "type": "number"
+          }
+        },
+        "required": [
+          "opponent",
+          "opponent_name",
+          "home",
+          "kickoff_time",
+          "xg_for",
+          "xg_against",
+          "cs_chance",
+          "attack",
+          "defence",
+          "overall"
+        ],
+        "title": "RatedFixture",
+        "type": "object"
+      },
       "RecentForm": {
         "properties": {
           "avg_minutes_last3": {
@@ -791,6 +977,29 @@
           "matches_played"
         ],
         "title": "RecentForm",
+        "type": "object"
+      },
+      "RunTotals": {
+        "properties": {
+          "attack": {
+            "title": "Attack",
+            "type": "number"
+          },
+          "defence": {
+            "title": "Defence",
+            "type": "number"
+          },
+          "overall": {
+            "title": "Overall",
+            "type": "number"
+          }
+        },
+        "required": [
+          "overall",
+          "attack",
+          "defence"
+        ],
+        "title": "RunTotals",
         "type": "object"
       },
       "SquadPlayer": {
@@ -1297,6 +1506,31 @@
         "title": "TeamRequest",
         "type": "object"
       },
+      "TeamStrength": {
+        "properties": {
+          "attack": {
+            "description": "xG created per match at a neutral ground (recency-weighted, shrunk)",
+            "title": "Attack",
+            "type": "number"
+          },
+          "defence": {
+            "description": "xG conceded per match at a neutral ground",
+            "title": "Defence",
+            "type": "number"
+          },
+          "matches": {
+            "title": "Matches",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "attack",
+          "defence",
+          "matches"
+        ],
+        "title": "TeamStrength",
+        "type": "object"
+      },
       "ToolCall": {
         "properties": {
           "args": {
@@ -1542,6 +1776,24 @@
           }
         },
         "summary": "Compare"
+      }
+    },
+    "/api/fixtures": {
+      "get": {
+        "operationId": "fixtures_api_fixtures_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FixturesResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Fixtures"
       }
     },
     "/api/news": {

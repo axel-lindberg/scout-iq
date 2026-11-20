@@ -5,6 +5,7 @@ import { formatKickoff } from "../../lib/format";
 const PAGES = [
   { to: "/", label: "Predictions" },
   { to: "/my-team", label: "My team" },
+  { to: "/fixtures", label: "Fixtures" },
 ];
 
 export function StatusHeader() {

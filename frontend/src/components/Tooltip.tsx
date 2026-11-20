@@ -65,7 +65,7 @@ export function Tooltip({ content, className = "", children }: Props) {
           role="tooltip"
           hidden={!pos}
           style={pos ? { left: pos.x, top: pos.y, transform: `translate(-50%, ${pos.above ? "-100%" : "0"})` } : undefined}
-          className="pointer-events-none fixed z-50 w-max max-w-64 rounded-lg border border-line bg-surface px-3 py-2 text-[13px] leading-snug text-ink shadow-lg"
+          className="pointer-events-none fixed z-50 w-max max-w-64 rounded-lg whitespace-pre-line border border-line bg-surface px-3 py-2 text-[13px] leading-snug text-ink shadow-lg"
         >
           {content}
         </span>,

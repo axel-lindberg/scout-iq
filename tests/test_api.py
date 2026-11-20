@@ -321,3 +321,27 @@ def test_chat_passes_the_team_to_the_agent():
     c.post("/api/chat", json={"message": "and now?", "session_id": sid})
     assert agents[0].team is None                                     # no team sent -> none
     assert c.post("/api/chat", json={"message": "x", "team": {**team, "player_ids": ids[:3]}}).status_code == 422
+
+
+def test_fixtures_ratings_with_a_double_and_a_blank():
+    from test_difficulty import TEAMS, UPCOMING, PLAYED, _history
+
+    from scout_iq.difficulty import fixture_difficulty
+    up = _upcoming()
+    up.difficulty = fixture_difficulty(_history(PLAYED), UPCOMING, TEAMS, [2, 3, 4])
+    body = TestClient(create_app(up, ScoutTools(up), None)).get("/api/fixtures").json()
+    assert body["gameweeks"] == [2, 3, 4]
+    teams = {t["short_name"]: t for t in body["teams"]}
+    assert set(teams) == {"AAA", "BBB", "CCC", "DDD"} and teams["AAA"]["code"] == 11
+    aaa = [c["fixtures"] for c in teams["AAA"]["gameweeks"]]
+    assert [len(f) for f in aaa] == [1, 2, 1]                                  # GW3 is a double
+    assert [(f["opponent"], f["home"]) for f in aaa[1]] == [("BBB", True), ("BBB", False)]
+    assert [len(c["fixtures"]) for c in teams["CCC"]["gameweeks"]] == [1, 0, 1]   # GW3 is blank
+    total = sum(f["overall"] for c in teams["AAA"]["gameweeks"] for f in c["fixtures"])
+    assert abs(teams["AAA"]["totals"]["overall"] - total) < 0.01
+
+
+def test_fixtures_without_ratings_is_empty_not_an_error():
+    c = _client()
+    body = c.get("/api/fixtures").json()
+    assert body["teams"] == [] and body["gameweeks"] == []
