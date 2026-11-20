@@ -9,7 +9,10 @@ import type { Lineup } from "./plan";
 /** Saved transfers and lineup on top of the original squad. Bank and free transfers are deltas. */
 export interface SavedPlan {
   playerIds: number[];
+  /** The lineup for the first gameweek planned (what older saves had). */
   lineup: Lineup;
+  /** Lineup per gameweek (keys are gameweek numbers). Missing gameweeks carry the previous one on. */
+  lineups?: Record<string, Lineup>;
   /** Transfers made (players bought that weren't in the original squad). */
   transfers: number;
   /** £m from sales minus £m spent, at today's prices. */
@@ -53,22 +56,38 @@ function write(key: string, value: string | null) {
 const isIds = (v: unknown, n: number): v is number[] =>
   Array.isArray(v) && v.length === n && v.every((x) => Number.isInteger(x));
 
+function isLineup(l: unknown, playerIds: readonly number[]): l is Lineup {
+  if (typeof l !== "object" || l === null) return false;
+  const x = l as Partial<Lineup>;
+  return (
+    isIds(x.starters, 11) &&
+    isIds(x.bench, 4) &&
+    new Set([...x.starters, ...x.bench]).size === 15 &&
+    [...x.starters, ...x.bench].every((id) => playerIds.includes(id)) &&
+    typeof x.captain === "number" &&
+    typeof x.vice === "number" &&
+    x.starters.includes(x.captain) &&
+    x.starters.includes(x.vice)
+  );
+}
+
 function isPlan(v: unknown): v is SavedPlan {
   if (typeof v !== "object" || v === null) return false;
   const p = v as Partial<SavedPlan>;
-  const l = p.lineup;
   return (
     isIds(p.playerIds, 15) &&
     typeof p.transfers === "number" &&
     typeof p.bankDelta === "number" &&
-    typeof l === "object" &&
-    isIds(l.starters, 11) &&
-    isIds(l.bench, 4) &&
-    new Set([...l.starters, ...l.bench]).size === 15 &&
-    [...l.starters, ...l.bench].every((x) => p.playerIds?.includes(x)) &&
-    l.starters.includes(l.captain) &&
-    l.starters.includes(l.vice)
+    isLineup(p.lineup, p.playerIds)
   );
+}
+
+/** Keep only the per-gameweek lineups that fit the plan's squad. */
+function cleanLineups(p: SavedPlan): SavedPlan {
+  const raw: unknown = p.lineups;
+  if (typeof raw !== "object" || raw === null) return { ...p, lineups: {} };
+  const lineups = Object.fromEntries(Object.entries(raw).filter(([, l]) => isLineup(l, p.playerIds)));
+  return { ...p, lineups };
 }
 
 function isSavedTeam(v: unknown): v is SavedTeam {
@@ -94,7 +113,7 @@ function snapshot(): SavedTeam | null {
         ? {
             ...parsed,
             entry: parsed.entry ?? null,
-            plan: isPlan(parsed.plan) ? parsed.plan : null,
+            plan: isPlan(parsed.plan) ? cleanLineups(parsed.plan) : null,
           }
         : null;
     } catch {

@@ -103,12 +103,12 @@ export function teamAnalysis(overrides: Partial<TeamAnalysis> = {}): TeamAnalysi
       formation: "4-4-2",
       starters,
       bench: BENCH,
-      // Haaland blanks in GW 13: Isak captains instead.
+      // Haaland blanks in GW 13 (0 xPts): Isak captains instead, 47.5 − 7.1 + 4.9.
       captain: gw === 13 ? 31 : 30,
       vice_captain: gw === 13 ? 21 : 31,
-      expected_points: [54.6, 53.1, 50.2, 54.0, 52.8][k] ?? 0,
+      expected_points: [54.6, 54.6, 45.3, 54.6, 54.6][k] ?? 0,
     })),
-    squad_expected_points: [54.6, 53.1, 50.2, 54.0, 52.8],
+    squad_expected_points: [54.6, 54.6, 45.3, 54.6, 54.6],
     weakest: [
       { id: 24, name: "Rudoni", reason: "low expected points", expected_points_horizon_adjusted: 2 },
       { id: 20, name: "Saka", reason: "doubtful", expected_points_horizon_adjusted: 22.5 },

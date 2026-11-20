@@ -6,6 +6,7 @@ import {
   fillAt,
   lineupOf,
   lineupPoints,
+  reconcile,
   removeAt,
   setCaptain,
   setVice,
@@ -137,5 +138,18 @@ describe("plan", () => {
       ],
     );
     expect(lineupOf(next)?.starters).toEqual([1, 10, 11, 12, 60, 20, 21, 22, 50, 30, 31]);
+  });
+
+  it("reconciles another gameweek's lineup with a changed squad, slot by slot", () => {
+    // GW2 has a different lineup: 24 starts instead of 23, 31 is captain.
+    const gw2 = draftFromLineup({ ...lineup, starters: lineup.starters.map((x) => (x === 23 ? 24 : x)), bench: [2, 23, 14, 32], captain: 31, vice: 30 }, pos);
+    const sold = ORIGINAL.filter((x) => x !== 24);
+    const emptied = reconcile(gw2, sold, pos);
+    expect(emptied.xi.map((s) => s.id)).toContain(null); // 24 sold: his starting slot is empty
+    expect(emptied.xi.find((s) => s.id === null)?.position).toBe("MID");
+
+    const bought = reconcile(emptied, [...sold, 50], pos);
+    expect(lineupOf(bought)).toEqual({ ...lineupOf(gw2), starters: lineupOf(gw2)?.starters.map((x) => (x === 24 ? 50 : x)) });
+    expect(reconcile(gw2, ORIGINAL, pos)).toEqual(gw2); // same squad: unchanged
   });
 });

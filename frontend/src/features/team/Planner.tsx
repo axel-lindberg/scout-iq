@@ -10,7 +10,9 @@ import {
   emptySlots,
   fillAt,
   lineupOf,
+  type Lineup,
   lineupPoints,
+  reconcile,
   removeAt,
   sameDraft,
   sameRef,
@@ -66,16 +68,19 @@ interface BodyProps {
   team: SavedTeam;
   players: readonly PlayerOption[];
   gameweeks: readonly number[];
-  initial: Draft;
+  /** One draft per gameweek: the same 15 players, each gameweek with its own lineup and armband. */
+  initials: readonly [Draft, ...Draft[]];
+  /** Which gameweek the pitch shows (0 = the next one); kept by the parent so a save doesn't reset it. */
+  gwIdx: number;
+  setGwIdx: (i: number) => void;
 }
 
-function PlannerBody({ team, players, gameweeks, initial }: BodyProps) {
-  const [draft, setDraft] = useState(initial);
+function PlannerBody({ team, players, gameweeks, initials, gwIdx, setGwIdx }: BodyProps) {
+  const [drafts, setDrafts] = useState<Draft[]>([...initials]);
   const [selected, setSelected] = useState<SlotRef | null>(null);
   const [picking, setPicking] = useState<SlotRef | null>(null);
   const [message, setMessage] = useState<string | null>(null);
-  /** Which gameweek of the horizon the pitch shows (0 = the next one). */
-  const [gwIdx, setGwIdx] = useState(0);
+  const draft = drafts[gwIdx] ?? initials[0];
 
   const byId = useMemo(() => new Map(players.map((p) => [p.id, p])), [players]);
   const playerOf = useCallback((id: number) => byId.get(id), [byId]);
@@ -83,7 +88,7 @@ function PlannerBody({ team, players, gameweeks, initial }: BodyProps) {
   const priceOf = (id: number) => byId.get(id)?.price ?? 0;
   const positionOf = (id: number) => byId.get(id)?.position ?? "MID";
 
-  const ids = squadIds(draft);
+  const ids = squadIds(drafts[0] ?? draft); // the squad is shared; GW order keeps the request stable
   const complete = emptySlots(draft) === 0;
   const ts = transferState(team.playerIds, team.bank, team.freeTransfers, ids, priceOf);
   const errors = complete ? squadErrors(ids.flatMap((x) => byId.get(x) ?? [])) : [];
@@ -96,16 +101,26 @@ function PlannerBody({ team, players, gameweeks, initial }: BodyProps) {
   const optimum = best?.expected_points ?? null;
   // Transfers are made before the next deadline, so a hit only counts in the first gameweek.
   const hitsHere = gwIdx === 0 ? ts.hits : 0;
-  const dirty = !sameDraft(draft, initial);
+  const dirty = drafts.some((d, k) => !sameDraft(d, initials[k] ?? d));
+  const changedGws = gameweeks.filter((_, k) => drafts[k] && initials[k] && !sameDraft(drafts[k], initials[k]));
   const lineup = lineupOf(draft);
+  const lineups = drafts.map(lineupOf);
   const saveProblem = !complete
     ? `Buy ${emptySlots(draft) === 1 ? "a player for the empty slot" : `players for the ${emptySlots(draft)} empty slots`} first.`
     : ts.bank < 0
       ? `Over budget by £${(-ts.bank).toFixed(1)}m.`
       : (errors[0] ?? null);
 
+  /** Change this gameweek's draft; a squad change (sell / buy) is carried into every other gameweek. */
   const edit = (next: Draft) => {
-    setDraft(next);
+    const squad = squadIds(next);
+    setDrafts(drafts.map((d, k) => (k === gwIdx ? next : reconcile(d, squad, positionOf))));
+    setMessage(null);
+  };
+  const goTo = (k: number) => {
+    setGwIdx(Math.min(gameweeks.length - 1, Math.max(0, k)));
+    setSelected(null);
+    setPicking(null);
     setMessage(null);
   };
 
@@ -142,7 +157,9 @@ function PlannerBody({ team, players, gameweeks, initial }: BodyProps) {
   const selName = selSlot && selSlot.id !== null ? (byId.get(selSlot.id)?.name ?? "") : "";
   const gw = gameweeks[gwIdx] ?? 0;
   const net = points - hitsHere;
-  const horizonTotal = current ? data.squad_expected_points.reduce((a, b) => a + b, 0) - ts.hits : null;
+  const horizonBest = current ? data.squad_expected_points.reduce((a, b) => a + b, 0) - ts.hits : null;
+  const horizonMine =
+    drafts.reduce((sum, d, k) => sum + lineupPoints(d, (x) => byId.get(x)?.expected_points[k] ?? 0), 0) - ts.hits;
   const pickerSlot = picking && slotAt(draft, picking)?.id === null ? picking : null;
 
   return (
@@ -157,7 +174,7 @@ function PlannerBody({ team, players, gameweeks, initial }: BodyProps) {
                 aria-label="Previous gameweek"
                 disabled={gwIdx === 0}
                 onClick={() => {
-                  setGwIdx((i) => Math.max(0, i - 1));
+                  goTo(gwIdx - 1);
                 }}
               >
                 <span aria-hidden="true">‹</span>
@@ -171,7 +188,7 @@ function PlannerBody({ team, players, gameweeks, initial }: BodyProps) {
                 aria-label="Next gameweek"
                 disabled={gwIdx >= gameweeks.length - 1}
                 onClick={() => {
-                  setGwIdx((i) => Math.min(gameweeks.length - 1, i + 1));
+                  goTo(gwIdx + 1);
                 }}
               >
                 <span aria-hidden="true">›</span>
@@ -180,7 +197,7 @@ function PlannerBody({ team, players, gameweeks, initial }: BodyProps) {
             <p className="text-xs text-muted">
               {gwIdx === 0
                 ? "Make changes on the pitch; nothing is saved until you press Save."
-                : `${gwIdx + 1} gameweeks ahead: the same squad and lineup, less certain (form as of today).`}
+                : `Lineup and captain for GW${gw} only; transfers apply from GW${gameweeks[0] ?? gw}. Less certain: form as of today.`}
             </p>
           </div>
           <div className="text-right" aria-live="polite">
@@ -234,7 +251,7 @@ function PlannerBody({ team, players, gameweeks, initial }: BodyProps) {
             type="button"
             className="btn"
             disabled={!current}
-            title={current ? `Best XI, bench order and captain for these 15 players in GW${gw}` : undefined}
+            title={current ? `Best XI, bench order and captain for these 15 players in GW${gw} only` : undefined}
             onClick={() => {
               if (!best) return;
               edit(draftFromLineup(fromBackend(best), positionOf));
@@ -246,14 +263,17 @@ function PlannerBody({ team, players, gameweeks, initial }: BodyProps) {
           <button
             type="button"
             className="btn btn-primary"
-            disabled={!dirty || saveProblem !== null || lineup === null}
+            disabled={!dirty || saveProblem !== null || lineups.some((l) => l === null)}
             onClick={() => {
-              if (!lineup) return;
+              const all = lineups.flatMap((l) => (l ? [l] : []));
+              const first = all[0];
+              if (!first || all.length !== gameweeks.length) return;
               saveTeam({
                 ...team,
                 plan: {
                   playerIds: ids,
-                  lineup,
+                  lineup: first,
+                  lineups: Object.fromEntries(gameweeks.map((g, k) => [String(g), all[k] as Lineup])),
                   transfers: ts.made,
                   bankDelta: ts.bankDelta,
                 },
@@ -272,14 +292,18 @@ function PlannerBody({ team, players, gameweeks, initial }: BodyProps) {
               setPicking(null);
               setMessage(null);
               if (team.plan) saveTeam({ ...team, plan: null });
-              else setDraft(initial);
+              else setDrafts([...initials]);
             }}
           >
             Reset
           </button>
           <p className="text-xs" aria-live="polite">
             {dirty ? (
-              <span className="font-medium text-warn">Unsaved changes{saveProblem ? ` · ${saveProblem}` : ""}</span>
+              <span className="font-medium text-warn">
+                Unsaved changes
+                {changedGws.length > 0 ? ` in ${changedGws.map((g) => `GW${g}`).join(", ")}` : ""}
+                {saveProblem ? ` · ${saveProblem}` : ""}
+              </span>
             ) : team.plan ? (
               <span className="text-muted">
                 Saved
@@ -389,13 +413,18 @@ function PlannerBody({ team, players, gameweeks, initial }: BodyProps) {
             setPicking(sameRef(picking, r) ? null : r);
           }}
         />
-        {horizonTotal !== null && (
-          <p className="mt-2 text-xs text-muted">
-            Next {gameweeks.length} gameweeks with the best XI each week:{" "}
-            <span className="font-mono font-medium text-ink tabular-nums">{horizonTotal.toFixed(1)}</span> points
-            {ts.hits > 0 ? ` (after the −${ts.hits} hit)` : ""}.
-          </p>
-        )}
+        <p className="mt-2 text-xs text-muted" data-testid="horizon-points">
+          Next {gameweeks.length} gameweeks with your lineups:{" "}
+          <span className="font-mono font-medium text-ink tabular-nums">{horizonMine.toFixed(1)}</span> points
+          {horizonBest !== null ? (
+            <>
+              {" "}
+              (best XI each week:{" "}
+              <span className="font-mono font-medium text-ink tabular-nums">{horizonBest.toFixed(1)}</span>)
+            </>
+          ) : null}
+          {ts.hits > 0 ? `, after the −${ts.hits} hit` : ""}.
+        </p>
       </Card>
 
       {analysis.error && complete && (
@@ -454,6 +483,7 @@ function PlannerBody({ team, players, gameweeks, initial }: BodyProps) {
 /** Plan transfers, substitutions and the armband on top of the saved squad. */
 export function Planner({ team }: { team: SavedTeam }) {
   const players = usePlayers(true);
+  const [gwIdx, setGwIdx] = useState(0);
   const saved = currentSquad(team);
   // The starting lineup: the saved plan's, else the backend's best XI for the original squad.
   const original = useTeamAnalysis(team.plan ? null : teamRequest(saved.playerIds, saved.bank, saved.freeTransfers));
@@ -473,19 +503,30 @@ export function Planner({ team }: { team: SavedTeam }) {
         </button>
       </p>
     );
-  const lineup = team.plan?.lineup ?? (original.data ? fromBackend(original.data.lineup) : null);
-  if (!players.data || !lineup) return <p className="text-sm text-muted">Analysing your squad…</p>;
+  const first = team.plan?.lineup ?? (original.data ? fromBackend(original.data.lineup) : null);
+  if (!players.data || !first) return <p className="text-sm text-muted">Analysing your squad…</p>;
 
+  // Each gameweek: the saved lineup, else (no plan) the backend's best XI, else the previous gameweek's.
+  const gameweeks = players.data.gameweeks;
+  const perGw: Lineup[] = [];
+  gameweeks.forEach((g, k) => {
+    const saved = team.plan?.lineups?.[String(g)];
+    const best = team.plan ? undefined : original.data?.lineups.find((l) => l.gameweek === g);
+    perGw.push(saved ?? (best ? fromBackend(best) : (perGw[k - 1] ?? first)));
+  });
   const pos = new Map(players.data.players.map((p) => [p.id, p.position]));
-  const initial = draftFromLineup(lineup, (id) => pos.get(id) ?? "MID");
+  const toDraft = (l: Lineup) => draftFromLineup(l, (id) => pos.get(id) ?? "MID");
+  const initials: [Draft, ...Draft[]] = [toDraft(perGw[0] ?? first), ...perGw.slice(1).map(toDraft)];
   const key = JSON.stringify([team.playerIds, team.plan ?? null]);
   return (
     <PlannerBody
       key={key}
       team={team}
       players={players.data.players}
-      gameweeks={players.data.gameweeks}
-      initial={initial}
+      gameweeks={gameweeks}
+      initials={initials}
+      gwIdx={Math.min(gwIdx, Math.max(0, gameweeks.length - 1))}
+      setGwIdx={setGwIdx}
     />
   );
 }

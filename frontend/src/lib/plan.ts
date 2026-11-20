@@ -218,3 +218,22 @@ export function applyTransfer(
 }
 
 export const sameDraft = (a: Draft, b: Draft) => JSON.stringify(a) === JSON.stringify(b);
+
+/**
+ * Bring another gameweek's draft in line with a changed squad: a player no longer in `ids` is
+ * replaced in his slot by a new player of the same position (or the slot is left empty), and an
+ * empty slot is filled by a new player of its position. Lineups keep their shape; the armband stays.
+ */
+export function reconcile(d: Draft, ids: readonly number[], positionOf: (id: number) => string): Draft {
+  const keep = new Set(ids);
+  const inDraft = new Set(squadIds(d));
+  const fresh: Partial<Record<Position, number[]>> = {};
+  for (const id of ids) {
+    if (inDraft.has(id)) continue;
+    const p = positionOf(id);
+    const pos: Position = isPosition(p) ? p : "MID";
+    (fresh[pos] ??= []).push(id);
+  }
+  const fix = (s: Slot): Slot => (s.id !== null && keep.has(s.id) ? s : { ...s, id: fresh[s.position]?.shift() ?? null });
+  return { ...d, xi: d.xi.map(fix), bench: d.bench.map(fix) };
+}

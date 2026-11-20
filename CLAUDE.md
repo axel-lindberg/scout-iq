@@ -65,7 +65,8 @@ My team: FPL entry endpoints (`fpl_api.fetch_entry_team`) or 15 hand-picked ids 
 - `features/`: `predictions/`, `compare/`, `chat/`, `fixtures/` (table + `TeamPicker`), `status/`, `team/`
   (load by ID, `SquadBuilder`, `Planner` = editable `Pitch` + `PlayerPicker`, `SquadTable`, `Transfers`).
 - `components/` (Card, Tooltip, AvailabilityBadge, `Shirt`), `lib/`: `shirts.ts` (the only shirt URL),
-  `teamStore.ts` (loaded squad + saved plan in localStorage; the chat sends the planned squad),
+  `teamStore.ts` (loaded squad + saved plan with a lineup per GW in localStorage; the chat sends the
+  planned squad),
   `squad.ts` (squad rules), `plan.ts` (pure draft logic: slots, swaps, armband, transfer count),
   `difficulty.ts` (5 colour steps (`--fdr-*` tokens), sorting, URL state).
 - `test/`: fixtures, mocked fetch (`mockApi.ts`), `renderApp()`.
@@ -127,8 +128,10 @@ some experiments himself, so leave those as next steps instead of doing them.
 - Fixtures page (`/fixtures`): difficulty by Overall/Attack/Defense, sortable, team comparison.
 - My team page + `analyze_my_team` + transfer planner on the pitch (sell ×, buy +, subs, captain,
   Optimise/Save/Reset), all checked on Axel's real team (2026-11-17). Unsaved drafts aren't persisted.
-- Pitch GW arrows (‹ ›) step through the 5 predicted GWs: same squad and lineup, that GW's fixture,
-  xPts and best XI; Optimise uses the GW shown; hits count only in the first GW. One plan, not per GW.
+- Pitch GW arrows (‹ ›) step through the 5 predicted GWs. One squad for all GWs (a sale/buy on any
+  GW is carried into the others slot by slot, `plan.reconcile`), but each GW has its own lineup and
+  armband, saved as `plan.lineups[gw]`. Defaults: saved lineup, else that GW's best XI, else the
+  previous GW's. Optimise changes the GW shown only; hits count only in the first GW.
 - Known limits: no selling prices (public API), free transfers estimated, the agent sometimes adds
   claims the tool didn't give (e.g. "reliable"): an agent eval would catch this.
 

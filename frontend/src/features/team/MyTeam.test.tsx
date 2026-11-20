@@ -238,13 +238,19 @@ describe("my team page", () => {
       await user.click(next);
       await user.click(next);
       expect(screen.getByRole("figure", { name: "Your team for gameweek 13" })).toBeInTheDocument();
-      const haaland = screen.getByRole("listitem", { name: "Haaland, captain" });
+      // Nothing saved yet: each gameweek starts from its own best XI, so Isak captains the blank week.
+      expect(screen.getByRole("listitem", { name: "Isak, captain" })).toBeInTheDocument();
+      const haaland = screen.getByRole("listitem", { name: /^Haaland/ });
       expect(haaland).toHaveTextContent("blank");
       expect(haaland).toHaveTextContent("0.0");
-      expect(points()).toBe("40.4"); // 54.6 without Haaland's 7.1 twice
-      expect(screen.getByText("best XI: 50.2 (+9.8)")).toBeInTheDocument();
+      expect(points()).toBe("45.3");
 
-      await user.click(screen.getByRole("button", { name: "Optimise" }));
+      await user.click(screen.getByRole("button", { name: "Select Haaland" }));
+      await user.click(screen.getByRole("button", { name: "Make captain" }));
+      expect(points()).toBe("40.4"); // a blank captain scores nothing
+      expect(screen.getByText("best XI: 45.3 (+4.9)")).toBeInTheDocument();
+
+      await user.click(screen.getByRole("button", { name: "Optimise" })); // this gameweek only
       expect(screen.getByRole("listitem", { name: "Isak, captain" })).toBeInTheDocument();
 
       await user.click(next);
@@ -253,6 +259,33 @@ describe("my team page", () => {
       expect(next).toBeDisabled();
       await user.click(prev);
       expect(screen.getByRole("figure", { name: "Your team for gameweek 14" })).toBeInTheDocument();
+    });
+
+    it("saves a different lineup per gameweek, stays on that gameweek, and shares transfers", async () => {
+      const { user } = await loaded();
+      const next = screen.getByRole("button", { name: "Next gameweek" });
+      await user.click(next);
+      await user.click(next); // GW13, Isak captain (best XI)
+      await user.click(screen.getByRole("button", { name: "Select Palmer" }));
+      await user.click(screen.getByRole("button", { name: "Make captain" }));
+      expect(screen.getByText(/Unsaved changes in GW13/)).toBeInTheDocument();
+
+      // A sale on GW13 is a squad change: it shows up in GW11 too, in the same slot.
+      await user.click(screen.getByRole("button", { name: "Remove Rudoni" }));
+      await user.click(screen.getByRole("button", { name: "Buy Cheapo" }));
+      await user.click(screen.getByRole("button", { name: "Save" }));
+
+      expect(screen.getByRole("heading", { name: "Your team · GW13" })).toBeInTheDocument(); // not back to GW11
+      expect(screen.getByRole("listitem", { name: "Palmer, captain" })).toBeInTheDocument();
+      const plan = (JSON.parse(window.localStorage.getItem("scout-iq.team") ?? "{}") as { plan: { lineups: Record<string, { captain: number; bench: number[] }> } }).plan;
+      expect(plan.lineups["13"]?.captain).toBe(21);
+      expect(plan.lineups["11"]?.captain).toBe(30);
+      expect(Object.keys(plan.lineups)).toEqual(["11", "12", "13", "14", "15"]);
+
+      await user.click(screen.getByRole("button", { name: "Previous gameweek" }));
+      await user.click(screen.getByRole("button", { name: "Previous gameweek" }));
+      expect(screen.getByRole("listitem", { name: "Haaland, captain" })).toBeInTheDocument();
+      expect(screen.getByRole("listitem", { name: "Cheapo, bench 2" })).toBeInTheDocument(); // Rudoni's bench slot
     });
 
     it("shows hits beyond the free transfers and blocks buys over budget", async () => {
