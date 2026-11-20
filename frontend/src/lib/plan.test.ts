@@ -1,11 +1,13 @@
 import {
   applyTransfer,
   cannotBuy,
+  carryForward,
   cannotSwap,
   draftFromLineup,
   fillAt,
   lineupOf,
   lineupPoints,
+  planStates,
   reconcile,
   removeAt,
   scorePercent,
@@ -159,5 +161,40 @@ describe("plan", () => {
     expect(scorePercent(60.4, 60.4)).toBe(100);
     expect(scorePercent(10, undefined)).toBeNull(); // still loading
     expect(scorePercent(0, 0)).toBeNull(); // nobody plays (a blank for everyone)
+  });
+
+  it("rolls free transfers and the bank from one gameweek to the next", () => {
+    // GW1: 5 free, 2 transfers (24 -> 50 costs 3.0 more, 14 -> 60 costs 1.0 more). GW2: 3 left + 1.
+    const gw1 = ORIGINAL.map((x) => (x === 24 ? 50 : x === 14 ? 60 : x));
+    const s = planStates(ORIGINAL, 5.0, 5, [gw1, gw1, gw1], [0, 0.4, 0], price);
+    expect(s.map((x) => [x.free, x.made, x.freeLeft, x.hits])).toEqual([
+      [5, 2, 3, 0],
+      [4, 0, 4, 0],
+      [5, 0, 5, 0], // capped at 5
+    ]);
+    expect(s.map((x) => x.bank)).toEqual([1.0, 1.4, 1.4]); // the 0.4 correction carries on
+    const hit = planStates(ORIGINAL, 9.0, 1, [gw1, gw1], [0, 0], price);
+    expect(hit.map((x) => [x.free, x.hits, x.freeLeft])).toEqual([
+      [1, 4, 0],
+      [1, 0, 1], // after a hit you get 1 again
+    ]);
+  });
+
+  it("carries a transfer into later gameweeks but leaves earlier ones alone", () => {
+    const d = draftFromLineup(lineup, pos);
+    // GW3 already sells 23 for 50 on top of the squad.
+    const gw3 = fillAt(removeAt(d, { part: "xi", index: 8 }), { part: "xi", index: 8 }, 50);
+    // Now in GW2 sell 14 (bench) and buy 60.
+    const gw2 = fillAt(removeAt(d, { part: "bench", index: 2 }), { part: "bench", index: 2 }, 60);
+    const out = carryForward([d, d, gw3], 1, gw2, pos);
+    expect(out[0]).toEqual(d);
+    expect(squadIds(out[2] ?? d).sort()).toEqual(squadIds(gw2).map((x) => (x === 23 ? 50 : x)).sort());
+    expect(out[2]?.xi[8]?.id).toBe(50); // GW3 keeps its own transfer, in its slot
+    expect(out[2]?.bench[2]?.id).toBe(60);
+
+    // Buying in GW2 the player GW3 was going to buy: GW3's transfer no longer applies (no MID slot free).
+    const gw2b = fillAt(removeAt(d, { part: "xi", index: 8 }), { part: "xi", index: 8 }, 50);
+    const again = carryForward([d, d, gw3], 1, gw2b, pos);
+    expect(squadIds(again[2] ?? d).sort()).toEqual(squadIds(gw2b).sort());
   });
 });

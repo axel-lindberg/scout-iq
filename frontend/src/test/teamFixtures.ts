@@ -148,6 +148,7 @@ const BUYS: [number, string, string, string, number, number][] = [
   [52, "De Cuyper", "BHA", "DEF", 4.9, 3.6],
   [53, "Mbeumo", "MUN", "MID", 8.0, 5.5],
   [54, "Cheapo", "LEI", "MID", 4.5, 1.0],
+  [55, "Cheap Def", "NFO", "DEF", 4.0, 1.0],
 ];
 
 /** /api/players: the squad, players to buy, and three more Arsenal players to break the club limit. */

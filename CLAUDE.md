@@ -67,9 +67,9 @@ My team: FPL entry endpoints (`fpl_api.fetch_entry_team`) or 15 hand-picked ids 
 - `features/`: `predictions/`, `compare/`, `chat/`, `fixtures/` (table + `TeamPicker`), `status/`, `team/`
   (load by ID, `SquadBuilder`, `Planner` = editable `Pitch` + `PlayerPicker`, `SquadTable`, `Transfers`).
 - `components/` (Card, Tooltip, AvailabilityBadge, `Shirt`), `lib/`: `shirts.ts` (the only shirt URL),
-  `teamStore.ts` (loaded squad + saved plan with a lineup per GW in localStorage; the chat sends the
-  planned squad),
-  `squad.ts` (squad rules), `plan.ts` (pure draft logic: slots, swaps, armband, transfer count),
+  `teamStore.ts` (loaded squad + saved plan with a squad/lineup per GW in localStorage; the chat sends
+  the first GW's planned squad),
+  `squad.ts` (squad rules), `plan.ts` (pure draft logic: slots, swaps, armband, per-GW transfers),
   `difficulty.ts` (5 colour steps (`--fdr-*` tokens), sorting, URL state).
 - `test/`: fixtures, mocked fetch (`mockApi.ts`), `renderApp()`.
 
@@ -130,10 +130,13 @@ some experiments himself, so leave those as next steps instead of doing them.
 - Fixtures page (`/fixtures`): difficulty by Overall/Attack/Defense, sortable, team comparison.
 - My team page + `analyze_my_team` + transfer planner on the pitch (sell ×, buy +, subs, captain,
   Optimise/Save/Reset), all checked on Axel's real team (2026-11-17). Unsaved drafts aren't persisted.
-- Pitch GW arrows (‹ ›) step through the 5 predicted GWs. One squad for all GWs (a sale/buy on any
-  GW is carried into the others slot by slot, `plan.reconcile`), but each GW has its own lineup and
-  armband, saved as `plan.lineups[gw]`. Defaults: saved lineup, else that GW's best XI, else the
-  previous GW's. Optimise changes the GW shown only; hits count only in the first GW.
+- Pitch GW arrows (‹ ›) step through the 5 predicted GWs; each GW has its own squad, lineup and
+  armband (`plan.lineups[gw]`). A transfer in GW k carries into later GWs (`plan.carryForward`, which
+  keeps their own transfers), never earlier ones. `plan.planStates` rolls free transfers (left + 1,
+  max 5, 1 after a hit), hits and bank week to week. The Bank box is editable per GW (a correction
+  for real selling prices, `plan.bankAdjust[gw]`, carried on). Defaults: saved lineup, else that GW's
+  best XI, else the previous GW's. Optimise changes the GW shown only. The analysis (best XI,
+  suggestions) is for the shown GW's squad but still over all 5 GWs from the next one.
 - GW score strip: each GW's lineup points (minus the hit in GW1) as a % of that GW's perfect team;
   click a score to jump to that GW.
 - Known limits: no selling prices (public API), free transfers estimated, the agent sometimes adds
@@ -147,6 +150,7 @@ some experiments himself, so leave those as next steps instead of doing them.
 
 - Confidence intervals for model vs baselines (gameweek bootstrap) and several random seeds; an
   agent evaluation set (questions with expected tools and facts), traced in LangSmith.
+- Transfer suggestions from a later GW's point of view (analysis with a start gameweek in `team.py`).
 - Bench value / auto-subs in the team objective (bench points count 0 now), and a "roll the
   transfer" option valued explicitly.
 - Link players across seasons so early-season predictions improve.
@@ -174,3 +178,5 @@ some experiments himself, so leave those as next steps instead of doing them.
 - 2026-11-20: GW score = your points / the perfect team's (best 15 of all players, FPL rules, per GW),
   not / your own best XI, so it also reflects transfers. Budget = max(£100m, squad value + bank) so a
   squad that rose in value can't pass 100% just by costing more. Solved exactly (MILP), not greedily.
+- 2026-11-20: Transfers per gameweek, counted against the week before, with FPL's roll-over (left + 1,
+  max 5). Bank corrections are typed per GW instead of modelling selling prices (not in the public API).

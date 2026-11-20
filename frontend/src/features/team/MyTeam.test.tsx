@@ -195,6 +195,7 @@ describe("my team page", () => {
       return { api, ...r };
     }
     const points = () => screen.getByTestId("predicted-points").textContent;
+    const bank = (gw = 11) => screen.getByLabelText(`Bank in GW${gw}, £m`);
     const stat = (name: string) => screen.getByText(name, { selector: "dt" }).nextElementSibling?.textContent;
 
     it("sells with ×, buys with +, and counts transfers, bank and points live; buying back is free", async () => {
@@ -213,7 +214,7 @@ describe("my team page", () => {
       expect(points()).toBe("56.2");
       expect(stat("Transfers")).toBe("1");
       expect(stat("Free transfers left")).toBe("1 of 2");
-      expect(stat("Bank")).toBe("£0.4m");
+      expect(bank()).toHaveValue(0.4);
       expect(screen.getByText(/Unsaved changes/)).toBeInTheDocument();
 
       // Changed my mind: Semenyo back. No transfer used, bank as before.
@@ -225,7 +226,7 @@ describe("my team page", () => {
       );
       expect(stat("Transfers")).toBe("0");
       expect(stat("Free transfers left")).toBe("2 of 2");
-      expect(stat("Bank")).toBe("£0.9m");
+      expect(bank()).toHaveValue(0.9);
       expect(points()).toBe("54.6");
     });
 
@@ -280,7 +281,7 @@ describe("my team page", () => {
       expect(screen.getByText(/£103\.4m, 3 per club/)).toBeInTheDocument();
     });
 
-    it("saves a different lineup per gameweek, stays on that gameweek, and shares transfers", async () => {
+    it("saves a different lineup per gameweek, stays on that gameweek; transfers apply from their week on", async () => {
       const { user } = await loaded();
       const next = screen.getByRole("button", { name: "Next gameweek" });
       await user.click(next);
@@ -289,7 +290,7 @@ describe("my team page", () => {
       await user.click(screen.getByRole("button", { name: "Make captain" }));
       expect(screen.getByText(/Unsaved changes in GW13/)).toBeInTheDocument();
 
-      // A sale on GW13 is a squad change: it shows up in GW11 too, in the same slot.
+      // A transfer in GW13 applies from GW13 on: GW11 and GW12 keep Rudoni.
       await user.click(screen.getByRole("button", { name: "Remove Rudoni" }));
       await user.click(screen.getByRole("button", { name: "Buy Cheapo" }));
       await user.click(screen.getByRole("button", { name: "Save" }));
@@ -304,7 +305,50 @@ describe("my team page", () => {
       await user.click(screen.getByRole("button", { name: "Previous gameweek" }));
       await user.click(screen.getByRole("button", { name: "Previous gameweek" }));
       expect(screen.getByRole("listitem", { name: "Haaland, captain" })).toBeInTheDocument();
+      expect(screen.getByRole("listitem", { name: "Rudoni, bench 2" })).toBeInTheDocument();
+      expect(stat("Transfers")).toBe("0");
+      await user.click(within(screen.getByRole("list", { name: "Score per gameweek" })).getByRole("button", { name: /^GW14/ }));
       expect(screen.getByRole("listitem", { name: "Cheapo, bench 2" })).toBeInTheDocument(); // Rudoni's bench slot
+      expect(stat("Transfers")).toBe("0"); // made in GW13, not again
+      expect(plan.lineups["12"]?.bench).toContain(24);
+      expect(plan.lineups["14"]?.bench).not.toContain(24);
+    });
+
+    it("rolls free transfers into the next gameweek and lets you correct the bank", async () => {
+      const { user } = await loaded(); // 2 free transfers, £0.9m
+      await user.click(screen.getByRole("button", { name: "Remove Rudoni" }));
+      await user.click(screen.getByRole("button", { name: "Buy Cheapo" }));
+      expect(stat("Free transfers left")).toBe("1 of 2");
+
+      await user.click(screen.getByRole("button", { name: "Next gameweek" }));
+      expect(stat("Transfers")).toBe("0");
+      expect(stat("Free transfers left")).toBe("2 of 2"); // 1 left + 1 new
+      // Two transfers in GW12 are free, a third costs 4.
+      for (const [out, buy] of [["Konsa", "De Cuyper"], ["Egan", "Cheap Def"]] as const) {
+        await user.click(screen.getByRole("button", { name: `Remove ${out}` }));
+        await user.click(screen.getByRole("button", { name: `Buy ${buy}` }));
+      }
+      expect(stat("Hits")).toBe("0");
+      expect(stat("Free transfers left")).toBe("0 of 2");
+      await user.click(screen.getByRole("button", { name: "Remove Semenyo" }));
+      await user.click(screen.getByRole("button", { name: "Buy Barry" }));
+      expect(stat("Hits")).toBe("−4");
+      await user.click(screen.getByRole("button", { name: "Next gameweek" }));
+      expect(stat("Free transfers left")).toBe("1 of 1"); // after a hit: 1 again
+
+      // FPL says the bank is £0.2m less after the GW11 sale: correct it there, it carries on.
+      await user.click(screen.getByRole("button", { name: "Previous gameweek" }));
+      await user.click(screen.getByRole("button", { name: "Previous gameweek" }));
+      const before = Number((bank() as HTMLInputElement).value);
+      await user.clear(bank());
+      await user.type(bank(), `${(before - 0.2).toFixed(1)}{Enter}`);
+      expect(screen.getByText("Bank (edited)")).toBeInTheDocument();
+      await user.click(screen.getByRole("button", { name: "Next gameweek" }));
+      expect(bank(12)).toHaveValue(Math.round((before - 0.2 - 0.3 + 2.1) * 10) / 10); // + GW12: Konsa→De Cuyper −0.3, Semenyo→Barry +2.1
+      await user.click(screen.getByRole("button", { name: "Save" }));
+      const saved = (JSON.parse(window.localStorage.getItem("scout-iq.team") ?? "{}") as { plan: { bankAdjust: Record<string, number>; transfers: number } }).plan;
+      expect(saved.bankAdjust).toEqual({ "11": -0.2 });
+      expect(saved.transfers).toBe(1); // the first gameweek's, what the chat sends
     });
 
     it("shows hits beyond the free transfers and blocks buys over budget", async () => {

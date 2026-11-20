@@ -6,16 +6,22 @@ import { useSyncExternalStore } from "react";
 import type { EntryInfo, TeamContext, TeamRequest } from "../api/endpoints";
 import type { Lineup } from "./plan";
 
-/** Saved transfers and lineup on top of the original squad. Bank and free transfers are deltas. */
+/**
+ * Saved transfers and lineups on top of the original squad. `playerIds`, `lineup`, `transfers` and
+ * `bankDelta` describe the first gameweek planned (what the chat sends); `lineups` holds every gameweek.
+ */
 export interface SavedPlan {
   playerIds: number[];
   /** The lineup for the first gameweek planned (what older saves had). */
   lineup: Lineup;
-  /** Lineup per gameweek (keys are gameweek numbers). Missing gameweeks carry the previous one on. */
+  /** Squad + lineup per gameweek (keys are gameweek numbers); each week can have its own transfers.
+   * Missing gameweeks carry the previous one on. */
   lineups?: Record<string, Lineup>;
-  /** Transfers made (players bought that weren't in the original squad). */
+  /** Your corrections to the bank per gameweek (£m, e.g. FPL's real selling prices). */
+  bankAdjust?: Record<string, number>;
+  /** Transfers made in the first gameweek (players bought that weren't in the original squad). */
   transfers: number;
-  /** £m from sales minus £m spent, at today's prices. */
+  /** £m in the bank after the first gameweek's transfers, minus the bank as loaded. */
   bankDelta: number;
 }
 
@@ -82,12 +88,24 @@ function isPlan(v: unknown): v is SavedPlan {
   );
 }
 
-/** Keep only the per-gameweek lineups that fit the plan's squad. */
+/** Keep only well-formed per-gameweek lineups (each is its own 15) and numeric bank corrections. */
 function cleanLineups(p: SavedPlan): SavedPlan {
   const raw: unknown = p.lineups;
-  if (typeof raw !== "object" || raw === null) return { ...p, lineups: {} };
-  const lineups = Object.fromEntries(Object.entries(raw).filter(([, l]) => isLineup(l, p.playerIds)));
-  return { ...p, lineups };
+  const lineups =
+    typeof raw === "object" && raw !== null
+      ? Object.fromEntries(
+          Object.entries(raw).filter(([, l]) => {
+            const x = l as Partial<Lineup> | null;
+            return isLineup(l, [...(x?.starters ?? []), ...(x?.bench ?? [])]);
+          }),
+        )
+      : {};
+  const adj: unknown = p.bankAdjust;
+  const bankAdjust =
+    typeof adj === "object" && adj !== null
+      ? Object.fromEntries(Object.entries(adj).filter(([, v]) => typeof v === "number" && Number.isFinite(v)))
+      : {};
+  return { ...p, lineups, bankAdjust };
 }
 
 function isSavedTeam(v: unknown): v is SavedTeam {
@@ -101,7 +119,10 @@ function isSavedTeam(v: unknown): v is SavedTeam {
   );
 }
 
-let cache: { raw: string | null; value: SavedTeam | null } = { raw: null, value: null };
+let cache: { raw: string | null; value: SavedTeam | null } = {
+  raw: null,
+  value: null,
+};
 
 function snapshot(): SavedTeam | null {
   const raw = read(TEAM_KEY);

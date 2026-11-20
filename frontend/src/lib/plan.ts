@@ -1,13 +1,15 @@
 /**
- * Planning transfers and the lineup in the browser: a draft of 11 starters + 4 bench slots.
+ * Planning transfers and the lineup in the browser: one draft (11 starters + 4 bench slots) per gameweek.
  *
- * Transfers, free transfers and the bank are always counted against the *original* squad (as loaded
- * or picked by hand), never against the last save. So selling a player and buying him back is zero
- * transfers again, and Reset is just "forget the plan".
+ * Each gameweek's transfers are counted against the gameweek before (the first against the squad as
+ * loaded or picked by hand), never against the last save. So selling a player and buying him back
+ * in the same gameweek is zero transfers again, and Reset is just "forget the plan". Free transfers
+ * roll over: the ones left plus 1 for the next gameweek, at most 5 (FPL's rule).
  */
-import { isPosition, MAX_PER_CLUB, type Position } from "./squad";
+import { isPosition, MAX_PER_CLUB, type Position, SQUAD_SHAPE } from "./squad";
 
 export const HIT_COST = 4;
+export const MAX_FREE_TRANSFERS = 5;
 export type Part = "xi" | "bench";
 export interface SlotRef {
   part: Part;
@@ -234,7 +236,8 @@ export function reconcile(d: Draft, ids: readonly number[], positionOf: (id: num
     const pos: Position = isPosition(p) ? p : "MID";
     (fresh[pos] ??= []).push(id);
   }
-  const fix = (s: Slot): Slot => (s.id !== null && keep.has(s.id) ? s : { ...s, id: fresh[s.position]?.shift() ?? null });
+  const fix = (s: Slot): Slot =>
+    s.id !== null && keep.has(s.id) ? s : { ...s, id: fresh[s.position]?.shift() ?? null };
   return { ...d, xi: d.xi.map(fix), bench: d.bench.map(fix) };
 }
 
@@ -242,4 +245,73 @@ export function reconcile(d: Draft, ids: readonly number[], positionOf: (id: num
 export function scorePercent(points: number, perfect: number | undefined): number | null {
   if (perfect === undefined || !(perfect > 0)) return null;
   return Math.round((100 * points) / perfect);
+}
+
+export interface GwState extends TransferState {
+  /** Free transfers available before this gameweek's transfers. */
+  free: number;
+  /** Your correction to the bank in this gameweek (e.g. FPL's real selling prices), £m. */
+  adjust: number;
+}
+
+/**
+ * Transfers, free transfers, hits and bank for every gameweek. Gameweek k is counted against
+ * gameweek k-1's squad and bank; free transfers left + 1 roll into the next gameweek (max 5).
+ */
+export function planStates(
+  original: readonly number[],
+  bank: number,
+  freeTransfers: number,
+  squads: readonly (readonly number[])[],
+  adjust: readonly number[],
+  priceOf: (id: number) => number,
+): GwState[] {
+  let prev = original;
+  let b = bank;
+  let free = freeTransfers;
+  return squads.map((ids, k) => {
+    const a = adjust[k] ?? 0;
+    const t = transferState(prev, b + a, free, ids, priceOf);
+    const out = { ...t, free, adjust: a };
+    prev = ids;
+    b = t.bank;
+    free = Math.min(MAX_FREE_TRANSFERS, t.freeLeft + 1);
+    return out;
+  });
+}
+
+/**
+ * Put `next` in as gameweek k's draft and carry its squad into the gameweeks after: each later
+ * gameweek keeps its own transfers (who it sold and bought compared with the week before) on top of
+ * the new squad, as far as they still make sense. Lineups and armbands stay; earlier gameweeks don't change.
+ */
+export function carryForward(
+  drafts: readonly Draft[],
+  k: number,
+  next: Draft,
+  positionOf: (id: number) => string,
+): Draft[] {
+  const out = [...drafts];
+  out[k] = next;
+  const pos = (id: number): Position => {
+    const p = positionOf(id);
+    return isPosition(p) ? p : "MID";
+  };
+  for (let j = k + 1; j < drafts.length; j++) {
+    const before = drafts[j - 1];
+    const mine = drafts[j];
+    const base = out[j - 1];
+    if (!before || !mine || !base) continue;
+    const prevIds = squadIds(before);
+    const ids = squadIds(mine);
+    const sold = new Set(prevIds.filter((x) => !ids.includes(x)));
+    const bought = ids.filter((x) => !prevIds.includes(x));
+    const squad = squadIds(base).filter((x) => !sold.has(x));
+    for (const b of bought) {
+      const p = pos(b);
+      if (!squad.includes(b) && squad.filter((x) => pos(x) === p).length < SQUAD_SHAPE[p]) squad.push(b);
+    }
+    out[j] = reconcile(mine, squad, positionOf);
+  }
+  return out;
 }
