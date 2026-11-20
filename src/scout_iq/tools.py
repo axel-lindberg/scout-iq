@@ -264,6 +264,11 @@ class ScoutTools:
             weakest.append({"id": e, "name": s["name"], "reason": reason,
                             "expected_points_horizon_adjusted": s["expected_points_horizon_adjusted"]})
 
+        def lineup_out(gw, lu):
+            return {"gameweek": gw, "formation": lu.formation, "starters": lu.starters, "bench": lu.bench,
+                    "captain": lu.captain, "vice_captain": lu.vice_captain,
+                    "expected_points": round(lu.points, 2)}
+
         def move(c):
             return {"out": [self._brief(e, h) for e in c["out"]], "in": [self._brief(e, h) for e in c["in"]],
                     "gain_per_gameweek": [round(float(v), 2) for v in c["per_gw"]],
@@ -273,10 +278,8 @@ class ScoutTools:
         return {
             "gameweeks": a["gameweeks"], "bank": round(float(bank), 1), "free_transfers": int(free_transfers),
             "squad": squad,
-            "lineup": {"gameweek": a["gameweeks"][0], "formation": lineup.formation,
-                       "starters": lineup.starters, "bench": lineup.bench,
-                       "captain": lineup.captain, "vice_captain": lineup.vice_captain,
-                       "expected_points": round(lineup.points, 2)},
+            "lineup": lineup_out(a["gameweeks"][0], lineup),
+            "lineups": [lineup_out(gw, lu) for gw, lu in zip(a["gameweeks"], a["lineups"])],
             "squad_expected_points": [round(v, 2) for v in a["squad_points_per_gw"]],
             "weakest": weakest,
             "transfers": [move(c) for c in a["singles"]],

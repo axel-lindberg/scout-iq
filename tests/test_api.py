@@ -253,6 +253,7 @@ def test_team_analyze_by_player_ids():
     assert len(a["squad"]) == 15 and len(a["lineup"]["starters"]) == 11 and len(a["lineup"]["bench"]) == 4
     assert [s["id"] for s in a["squad"]] == a["lineup"]["starters"] + a["lineup"]["bench"]
     assert a["lineup"]["expected_points"] == 24.0 and a["squad_expected_points"] == [24.0, 24.0]
+    assert [lu["gameweek"] for lu in a["lineups"]] == [11, 12] and a["lineups"][0] == a["lineup"]
     best = a["transfers"][0]
     assert [p["name"] for p in best["out"]] == ["WeakMid"] and [p["name"] for p in best["in"]] == ["GoodMid"]
     assert best["gain_per_gameweek"] == [8.0, 8.0] and best["net_gain"] == 16.0 and best["hits"] == 0

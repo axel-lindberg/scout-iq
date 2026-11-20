@@ -285,7 +285,8 @@ def analyze_squad(pool: Pool, squad: list[int], bank: float, free_transfers: int
     info = pool.info.loc[squad]
     X = pool.xpts[pool.rows(squad), :g]
     positions = info["position"].tolist()
-    next_xi = best_xi(squad, positions, X[:, 0].tolist())
+    lineups = [best_xi(squad, positions, X[:, k].tolist()) for k in range(X.shape[1])]
+    next_xi = lineups[0]
     sugg = suggest_transfers(pool, squad, bank, free_transfers, top_n=top_n, pairs=pairs, horizon=g)
 
     players = []
@@ -304,6 +305,6 @@ def analyze_squad(pool: Pool, squad: list[int], bank: float, free_transfers: int
                                  + [p["element"] for p in flagged]))
     return {
         "gameweeks": gws, "players": players,
-        "lineup": next_xi, "squad_points_per_gw": [float(x) for x in sugg["base_per_gw"]],
+        "lineup": next_xi, "lineups": lineups, "squad_points_per_gw": [float(x) for x in sugg["base_per_gw"]],
         "weakest": weakest, "singles": sugg["singles"], "pairs": sugg["pairs"],
     }

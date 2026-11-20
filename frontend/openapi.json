@@ -1306,7 +1306,16 @@
             "type": "array"
           },
           "lineup": {
-            "$ref": "#/components/schemas/LineupOut"
+            "$ref": "#/components/schemas/LineupOut",
+            "description": "Best XI for the next gameweek (= lineups[0])"
+          },
+          "lineups": {
+            "description": "Best XI for each gameweek in the horizon",
+            "items": {
+              "$ref": "#/components/schemas/LineupOut"
+            },
+            "title": "Lineups",
+            "type": "array"
           },
           "player_ids": {
             "items": {
@@ -1376,6 +1385,7 @@
           "free_transfers",
           "squad",
           "lineup",
+          "lineups",
           "squad_expected_points",
           "weakest",
           "transfers",

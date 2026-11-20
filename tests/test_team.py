@@ -97,6 +97,8 @@ def test_double_and_blank_gameweeks_in_the_xi():
     pool, ids = _pool(squad=rows)
     a = team.analyze_squad(pool, ids, bank=0.0, free_transfers=1)
     assert 30 not in a["lineup"].starters                             # blank -> benched in GW 11
+    assert 30 in a["lineups"][1].starters and a["lineups"][1].captain == 30   # double -> starts, captain
+    assert [lu.points for lu in a["lineups"]] == pytest.approx(a["squad_points_per_gw"])
     assert a["squad_points_per_gw"][0] == pytest.approx(24.0)
     assert a["squad_points_per_gw"][1] == pytest.approx(2 + 9 * 2 + 9 + 9)   # starts and captains in GW 12
     fwd0 = next(p for p in a["players"] if p["element"] == 30)

@@ -224,7 +224,8 @@ class TeamAnalysis(BaseModel):
     bank: float
     free_transfers: int
     squad: list[SquadPlayer] = Field(description="Starters (GK, DEF, MID, FWD) then the bench in order")
-    lineup: LineupOut
+    lineup: LineupOut = Field(description="Best XI for the next gameweek (= lineups[0])")
+    lineups: list[LineupOut] = Field(description="Best XI for each gameweek in the horizon")
     squad_expected_points: list[float] = Field(description="Best XI + captain, per gameweek")
     weakest: list[WeakPlayer]
     transfers: list[TransferOut]

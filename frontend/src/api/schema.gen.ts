@@ -665,7 +665,13 @@ export interface components {
             gameweeks: number[];
             /** Limitations */
             limitations: string[];
+            /** @description Best XI for the next gameweek (= lineups[0]) */
             lineup: components["schemas"]["LineupOut"];
+            /**
+             * Lineups
+             * @description Best XI for each gameweek in the horizon
+             */
+            lineups: components["schemas"]["LineupOut"][];
             /** Player Ids */
             player_ids: number[];
             /**
