@@ -24,16 +24,17 @@
   --chip: #15181d;
   --chip-ink: #ffffff;
   /* Fixture difficulty, 1 = very easy ... 5 = very hard (darkest = most extreme); each fill has its
-     own text colour (>= 4.5:1, except white on hard: 3.8:1, chosen by Axel). */
-  --fdr-1: #1d7a47;
+     own text colour. Greens and reds chosen by Axel, the same in both themes, all with white text
+     (>= 5:1). */
+  --fdr-1: #26462e;
   --fdr-1-ink: #ffffff;
-  --fdr-2: #bfe3cb;
-  --fdr-2-ink: #0f3320;
+  --fdr-2: #427b50;
+  --fdr-2-ink: #ffffff;
   --fdr-3: #e3e6e2;
   --fdr-3-ink: #15181d;
-  --fdr-4: #ff1751;
+  --fdr-4: #8a4243;
   --fdr-4-ink: #ffffff;
-  --fdr-5: #80072d;
+  --fdr-5: #572b2a;
   --fdr-5-ink: #ffffff;
   color-scheme: light;
 }
@@ -60,15 +61,15 @@
     --chip: #0b0e11;
     --chip-ink: #ffffff;
     /* As in light mode, the darkest shades are the extremes: deep green = very easy, deep red = very hard. */
-    --fdr-1: #0f5a32;
-    --fdr-1-ink: #e3f7ea;
-    --fdr-2: #5fb985;
-    --fdr-2-ink: #062213;
+    --fdr-1: #26462e;
+    --fdr-1-ink: #ffffff;
+    --fdr-2: #427b50;
+    --fdr-2-ink: #ffffff;
     --fdr-3: #3a434c;
     --fdr-3-ink: #eef1f4;
-    --fdr-4: #ff1751;
+    --fdr-4: #8a4243;
     --fdr-4-ink: #ffffff;
-    --fdr-5: #80072d;
+    --fdr-5: #572b2a;
     --fdr-5-ink: #ffffff;
     color-scheme: dark;
   }
