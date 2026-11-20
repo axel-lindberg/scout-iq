@@ -109,6 +109,15 @@ export function teamAnalysis(overrides: Partial<TeamAnalysis> = {}): TeamAnalysi
       expected_points: [54.6, 54.6, 45.3, 54.6, 54.6][k] ?? 0,
     })),
     squad_expected_points: [54.6, 54.6, 45.3, 54.6, 54.6],
+    perfect_budget: 103.4,
+    perfect_teams: GWS.map((gw) => ({
+      gameweek: gw,
+      player_ids: SQUAD_IDS,
+      starters,
+      captain: 30,
+      cost: 99.5,
+      expected_points: 60.4,
+    })),
     weakest: [
       { id: 24, name: "Rudoni", reason: "low expected points", expected_points_horizon_adjusted: 2 },
       { id: 20, name: "Saka", reason: "doubtful", expected_points_horizon_adjusted: 22.5 },

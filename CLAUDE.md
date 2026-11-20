@@ -49,6 +49,8 @@ My team: FPL entry endpoints (`fpl_api.fetch_entry_team`) or 15 hand-picked ids 
   bench order, weakest players, exact single-transfer search, pairs (sum-of-singles estimate, then
   exact re-score). Objective: best XI + captain per GW, summed over the horizon, minus 4 per hit.
   `analyze_squad` also returns the best XI for every GW (`lineups`, used by the pitch's GW arrows).
+  `perfect_squad`: the best legal 15 of all players for one GW, an exact integer programme (scipy
+  `milp`/HiGHS, ~0.2 s, cached per GW and budget in `tools.py`); returned as `perfect_teams`.
 - `news.py`: RAG over injury news (OpenAI embeddings, cosine similarity, cached index).
 - `tools.py`: the agent's tools and their JSON schemas (`horizon`, `rank_by`, `analyze_my_team`);
   strict name matching; `analyze_team()` shared by the API and the agent.
@@ -132,6 +134,8 @@ some experiments himself, so leave those as next steps instead of doing them.
   GW is carried into the others slot by slot, `plan.reconcile`), but each GW has its own lineup and
   armband, saved as `plan.lineups[gw]`. Defaults: saved lineup, else that GW's best XI, else the
   previous GW's. Optimise changes the GW shown only; hits count only in the first GW.
+- GW score strip: each GW's lineup points (minus the hit in GW1) as a % of that GW's perfect team;
+  click a score to jump to that GW.
 - Known limits: no selling prices (public API), free transfers estimated, the agent sometimes adds
   claims the tool didn't give (e.g. "reliable"): an agent eval would catch this.
 
@@ -167,3 +171,6 @@ some experiments himself, so leave those as next steps instead of doing them.
   or the model's `opp_*_last5` (noisy, ~3% of gain). Half-life 12 matches + shrinkage 5 tuned on
   2024-25 (next-match xG MSE 0.653 vs 0.704 for last-3 unshrunk); FPL `strength_overall` only before
   any match. Runs are summed, not averaged: a double counts twice and a blank adds 0.
+- 2026-11-20: GW score = your points / the perfect team's (best 15 of all players, FPL rules, per GW),
+  not / your own best XI, so it also reflects transfers. Budget = max(£100m, squad value + bank) so a
+  squad that rose in value can't pass 100% just by costing more. Solved exactly (MILP), not greedily.

@@ -15,6 +15,7 @@ import {
   reconcile,
   removeAt,
   sameDraft,
+  scorePercent,
   sameRef,
   setCaptain,
   setVice,
@@ -158,8 +159,16 @@ function PlannerBody({ team, players, gameweeks, initials, gwIdx, setGwIdx }: Bo
   const gw = gameweeks[gwIdx] ?? 0;
   const net = points - hitsHere;
   const horizonBest = current ? data.squad_expected_points.reduce((a, b) => a + b, 0) - ts.hits : null;
-  const horizonMine =
-    drafts.reduce((sum, d, k) => sum + lineupPoints(d, (x) => byId.get(x)?.expected_points[k] ?? 0), 0) - ts.hits;
+  // Per gameweek: your lineup's points (the hit only in the first) and its score against the perfect
+  // team. The perfect teams hardly depend on your squad, so the last analysis is fine while refetching.
+  const gwPoints = drafts.map(
+    (d, k) => lineupPoints(d, (x) => byId.get(x)?.expected_points[k] ?? 0) - (k === 0 ? ts.hits : 0),
+  );
+  const horizonMine = gwPoints.reduce((a, b) => a + b, 0);
+  const perfect = data?.perfect_teams ?? [];
+  const scores = gameweeks.map((_, k) => scorePercent(gwPoints[k] ?? 0, perfect[k]?.expected_points));
+  const score = scores[gwIdx] ?? null;
+  const perfectHere = perfect[gwIdx]?.expected_points;
   const pickerSlot = picking && slotAt(draft, picking)?.id === null ? picking : null;
 
   return (
@@ -218,8 +227,43 @@ function PlannerBody({ team, players, gameweeks, initials, gwIdx, setGwIdx }: Bo
                   ? "checking the best XI…"
                   : "empty slots score 0"}
             </p>
+            {score !== null && perfectHere !== undefined && (
+              <p className="text-xs text-muted tabular-nums" data-testid="gw-score">
+                <span className="font-semibold text-ink">{score}%</span> of the perfect team ({perfectHere.toFixed(1)})
+              </p>
+            )}
           </div>
         </div>
+
+        <ol className="mb-1 grid grid-cols-5 gap-1" aria-label="Score per gameweek">
+          {gameweeks.map((g, k) => {
+            const s = scores[k] ?? null;
+            const here = k === gwIdx;
+            return (
+              <li key={g}>
+                <button
+                  type="button"
+                  aria-current={here ? "true" : undefined}
+                  aria-label={`GW${g}${s === null ? "" : `, score ${s}%`}`}
+                  className={`flex w-full flex-col items-center rounded-lg border px-1 py-1 transition-colors ${here ? "border-accent bg-accent-soft" : "border-line bg-surface-2 hover:border-muted"}`}
+                  onClick={() => {
+                    goTo(k);
+                  }}
+                >
+                  <span className="text-[11px] text-muted">GW{g}</span>
+                  <span className="font-mono text-sm font-semibold tabular-nums">{s === null ? "–" : `${s}%`}</span>
+                  <span className="mt-0.5 h-1 w-full overflow-hidden rounded-full bg-line" aria-hidden="true">
+                    <span className="block h-full rounded-full bg-accent" style={{ width: `${Math.min(100, Math.max(0, s ?? 0))}%` }} />
+                  </span>
+                </button>
+              </li>
+            );
+          })}
+        </ol>
+        <p className="mb-3 text-xs text-muted">
+          Score = your lineup's predicted points ÷ the perfect team's: the best 15 of all players under FPL rules
+          {data ? ` (£${data.perfect_budget.toFixed(1)}m, 3 per club)` : ""}, picked for that gameweek alone.
+        </p>
 
         <dl className="mb-3 grid grid-cols-2 gap-2 text-sm sm:grid-cols-4" aria-label="Transfers">
           <div className="rounded-lg bg-surface-2 px-3 py-1.5">

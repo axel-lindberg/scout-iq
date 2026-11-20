@@ -8,6 +8,7 @@ import {
   lineupPoints,
   reconcile,
   removeAt,
+  scorePercent,
   setCaptain,
   setVice,
   squadIds,
@@ -151,5 +152,12 @@ describe("plan", () => {
     const bought = reconcile(emptied, [...sold, 50], pos);
     expect(lineupOf(bought)).toEqual({ ...lineupOf(gw2), starters: lineupOf(gw2)?.starters.map((x) => (x === 24 ? 50 : x)) });
     expect(reconcile(gw2, ORIGINAL, pos)).toEqual(gw2); // same squad: unchanged
+  });
+
+  it("scores a gameweek as a percentage of the perfect team", () => {
+    expect(scorePercent(45.3, 60.4)).toBe(75);
+    expect(scorePercent(60.4, 60.4)).toBe(100);
+    expect(scorePercent(10, undefined)).toBeNull(); // still loading
+    expect(scorePercent(0, 0)).toBeNull(); // nobody plays (a blank for everyone)
   });
 });

@@ -261,6 +261,25 @@ describe("my team page", () => {
       expect(screen.getByRole("figure", { name: "Your team for gameweek 14" })).toBeInTheDocument();
     });
 
+    it("scores every gameweek against the perfect team; a score jumps to its gameweek", async () => {
+      const { user } = await loaded();
+      const strip = screen.getByRole("list", { name: "Score per gameweek" });
+      // 54.6 / 60.4 and, in the blank week, 45.3 / 60.4.
+      expect(within(strip).getByRole("button", { name: "GW11, score 90%" })).toHaveAttribute("aria-current", "true");
+      expect(screen.getByTestId("gw-score")).toHaveTextContent("90% of the perfect team (60.4)");
+
+      await user.click(within(strip).getByRole("button", { name: "GW13, score 75%" }));
+      expect(screen.getByRole("heading", { name: "Your team · GW13" })).toBeInTheDocument();
+      expect(screen.getByTestId("gw-score")).toHaveTextContent("75%");
+
+      // A captain who blanks lowers only that gameweek's score.
+      await user.click(screen.getByRole("button", { name: "Select Haaland" }));
+      await user.click(screen.getByRole("button", { name: "Make captain" }));
+      expect(within(strip).getByRole("button", { name: "GW13, score 67%" })).toBeInTheDocument(); // 40.4 / 60.4
+      expect(within(strip).getByRole("button", { name: "GW11, score 90%" })).toBeInTheDocument();
+      expect(screen.getByText(/£103\.4m, 3 per club/)).toBeInTheDocument();
+    });
+
     it("saves a different lineup per gameweek, stays on that gameweek, and shares transfers", async () => {
       const { user } = await loaded();
       const next = screen.getByRole("button", { name: "Next gameweek" });

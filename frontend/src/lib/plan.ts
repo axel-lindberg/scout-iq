@@ -237,3 +237,9 @@ export function reconcile(d: Draft, ids: readonly number[], positionOf: (id: num
   const fix = (s: Slot): Slot => (s.id !== null && keep.has(s.id) ? s : { ...s, id: fresh[s.position]?.shift() ?? null });
   return { ...d, xi: d.xi.map(fix), bench: d.bench.map(fix) };
 }
+
+/** A gameweek score: points as a whole percentage of the perfect team's (null when unknown). */
+export function scorePercent(points: number, perfect: number | undefined): number | null {
+  if (perfect === undefined || !(perfect > 0)) return null;
+  return Math.round((100 * points) / perfect);
+}
