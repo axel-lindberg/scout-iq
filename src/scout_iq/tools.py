@@ -70,12 +70,22 @@ class ScoutTools:
             })
 
     _pool: team_mod.Pool | None = None
+    _perfect: dict[tuple[int, float], team_mod.PerfectSquad] | None = None
 
     @property
     def pool(self) -> team_mod.Pool:
         if self._pool is None:
             self._pool = team_mod.build_pool(self.up.players, self.up.by_gw, self.gameweeks)
         return self._pool
+
+    def perfect(self, gw_index: int, budget: float = team_mod.BUDGET) -> team_mod.PerfectSquad:
+        """The best possible squad for one gameweek and budget (solved once per pair, ~0.2 s)."""
+        if self._perfect is None:
+            self._perfect = {}
+        key = (gw_index, round(budget, 1))
+        if key not in self._perfect:
+            self._perfect[key] = team_mod.perfect_squad(self.pool, gw_index, budget=key[1])
+        return self._perfect[key]
 
     def _horizon(self, horizon: int | None) -> int:
         return max(1, min(int(horizon or 1), len(self.gameweeks)))
@@ -269,6 +279,13 @@ class ScoutTools:
                     "captain": lu.captain, "vice_captain": lu.vice_captain,
                     "expected_points": round(lu.points, 2)}
 
+        # A squad that grew in value can't be beaten by a £100m one only because it costs more.
+        budget = round(max(team_mod.BUDGET, float(pool.info.loc[ids, "price"].sum()) + float(bank)), 1)
+
+        def perfect_out(gw, p):
+            return {"gameweek": gw, "player_ids": p.squad, "starters": p.starters, "captain": p.captain,
+                    "cost": p.cost, "expected_points": round(p.points, 2)}
+
         def move(c):
             return {"out": [self._brief(e, h) for e in c["out"]], "in": [self._brief(e, h) for e in c["in"]],
                     "gain_per_gameweek": [round(float(v), 2) for v in c["per_gw"]],
@@ -280,6 +297,8 @@ class ScoutTools:
             "squad": squad,
             "lineup": lineup_out(a["gameweeks"][0], lineup),
             "lineups": [lineup_out(gw, lu) for gw, lu in zip(a["gameweeks"], a["lineups"])],
+            "perfect_budget": budget,
+            "perfect_teams": [perfect_out(gw, self.perfect(k, budget)) for k, gw in enumerate(a["gameweeks"])],
             "squad_expected_points": [round(v, 2) for v in a["squad_points_per_gw"]],
             "weakest": weakest,
             "transfers": [move(c) for c in a["singles"]],

@@ -373,6 +373,30 @@ export interface components {
             /** Test Season */
             test_season?: string | null;
         };
+        /** PerfectTeamOut */
+        PerfectTeamOut: {
+            /** Captain */
+            captain: number;
+            /**
+             * Cost
+             * @description £m, at most `perfect_budget`
+             */
+            cost: number;
+            /**
+             * Expected Points
+             * @description XI + captain again: the 100% mark for a gameweek score
+             */
+            expected_points: number;
+            /** Gameweek */
+            gameweek: number;
+            /**
+             * Player Ids
+             * @description The best possible 15 for this gameweek (GK, DEF, MID, FWD)
+             */
+            player_ids: number[];
+            /** Starters */
+            starters: number[];
+        };
         /** Player */
         Player: {
             /** Chance Of Playing */
@@ -672,6 +696,16 @@ export interface components {
              * @description Best XI for each gameweek in the horizon
              */
             lineups: components["schemas"]["LineupOut"][];
+            /**
+             * Perfect Budget
+             * @description £100m, or the squad's value + bank if that is more
+             */
+            perfect_budget: number;
+            /**
+             * Perfect Teams
+             * @description Best possible squad under FPL rules, per gameweek
+             */
+            perfect_teams: components["schemas"]["PerfectTeamOut"][];
             /** Player Ids */
             player_ids: number[];
             /**

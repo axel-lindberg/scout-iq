@@ -17,6 +17,11 @@ Transfers. Swapping one player only changes one position group, and there are ab
 candidate swaps, so every legal single transfer is scored exactly. Pairs are too many to score
 exactly (about 10^7), so each pair is first estimated as the sum of its two single-transfer gains,
 then the best estimates are re-scored exactly.
+
+Perfect squad. The best possible 15 for one gameweek from every player, under FPL's rules
+(£100m, 2-5-5-3, at most 3 per club, a legal XI). The XI and captain depend on which 15 are bought,
+so this is solved as one small integer programme (scipy's HiGHS), exactly. It is the 100% mark for
+the My team page's per-gameweek score.
 """
 
 from __future__ import annotations
@@ -26,6 +31,8 @@ from dataclasses import dataclass
 
 import numpy as np
 import pandas as pd
+from scipy.optimize import Bounds, LinearConstraint, milp
+from scipy.sparse import csr_matrix, hstack, identity, vstack
 
 SQUAD_SHAPE = {"GK": 2, "DEF": 5, "MID": 5, "FWD": 3}
 MAX_PER_CLUB = 3
@@ -33,6 +40,8 @@ HIT_COST = 4
 FORMATIONS = [(d, m, f) for d in range(3, 6) for m in range(2, 6) for f in range(1, 4) if d + m + f == 10]
 OUT_STATUSES = {"i", "s", "u", "n"}  # injured, suspended, unavailable, not in squad
 PAIR_RESCORE = 60                     # pair candidates re-scored exactly
+BUDGET = 100.0                        # £m, FPL's starting budget
+XI_LIMITS = {"GK": (1, 1), "DEF": (3, 5), "MID": (2, 5), "FWD": (1, 3)}
 
 
 @dataclass
@@ -122,6 +131,73 @@ def best_xi(elements: list[int], positions: list[str], xpts: list[float]) -> Lin
     return Lineup(formation=f"{d}-{m}-{f}", starters=[elements[i] for i in xi], bench=[elements[i] for i in bench],
                   captain=elements[ranked[0]], vice_captain=elements[ranked[1]],
                   points=float(total + xpts[ranked[0]]))
+
+
+# ---- perfect squad -------------------------------------------------------------------------
+
+@dataclass
+class PerfectSquad:
+    squad: list[int]
+    starters: list[int]
+    captain: int
+    cost: float
+    points: float            # XI + captain again
+
+
+def perfect_squad(pool: Pool, gw_index: int, budget: float = BUDGET) -> PerfectSquad:
+    """The best legal 15 for one gameweek (best XI + captain), solved exactly as an integer programme.
+
+    Variables per player: b (bought), s (starts), c (captain), all 0/1. Maximise sum xpts * (s + c)
+    subject to c <= s <= b, 11 starters, 1 captain, the squad shape, the XI limits per position,
+    3 per club and the budget. A tiny price term picks the cheaper squad among equal ones.
+    """
+    info = pool.info
+    n = len(info)
+    x = pool.xpts[:, gw_index]
+    price = info["price"].to_numpy(dtype=float)
+    pos = info["position"].to_numpy()
+    clubs = info["team_id"].to_numpy()
+    one = csr_matrix(np.ones((1, n)))
+    zero = csr_matrix((1, n))
+    eye = identity(n, format="csr")
+
+    def row(b=None, s=None, c=None):   # one constraint row over [b | s | c]
+        return hstack([v if v is not None else zero for v in (b, s, c)])
+
+    rows, lo, hi = [], [], []
+    def add(r, low, high):
+        rows.append(r)
+        lo.append(np.broadcast_to(low, r.shape[0]))
+        hi.append(np.broadcast_to(high, r.shape[0]))
+
+    add(hstack([-eye, eye, csr_matrix((n, n))]), -np.inf, 0)      # s <= b
+    add(hstack([csr_matrix((n, n)), -eye, eye]), -np.inf, 0)      # c <= s
+    add(row(s=one), 11, 11)
+    add(row(c=one), 1, 1)
+    add(row(b=csr_matrix(price[None, :])), 0, budget + 1e-6)
+    for p, k in SQUAD_SHAPE.items():
+        m = csr_matrix((pos == p).astype(float)[None, :])
+        add(row(b=m), k, k)
+        add(row(s=m), *XI_LIMITS[p])
+    for club in np.unique(clubs):
+        add(row(b=csr_matrix((clubs == club).astype(float)[None, :])), 0, MAX_PER_CLUB)
+
+    cost = np.concatenate([1e-6 * price, -x, -x])
+    res = milp(cost, constraints=LinearConstraint(vstack(rows).tocsr(), np.concatenate(lo), np.concatenate(hi)),
+               integrality=np.ones(3 * n), bounds=Bounds(0, 1))
+    if res.x is None:
+        raise ValueError(f"No legal squad within £{budget}m: {res.message}")
+    b, st, c = (np.round(res.x[k * n:(k + 1) * n]).astype(bool) for k in range(3))
+    elements = info.index.to_numpy()
+    order = {p: k for k, p in enumerate(SQUAD_SHAPE)}
+    by_pos = lambda idx: sorted((int(i) for i in idx), key=lambda i: (order[pos[i]], -x[i], elements[i]))
+    return PerfectSquad(
+        squad=[int(elements[i]) for i in by_pos(np.flatnonzero(b))],
+        starters=[int(elements[i]) for i in by_pos(np.flatnonzero(st))],
+        captain=int(elements[np.flatnonzero(c)[0]]),
+        cost=round(float(price[b].sum()), 1),
+        points=float(x[st].sum() + x[c].sum()),
+    )
 
 
 # ---- transfers -----------------------------------------------------------------------------

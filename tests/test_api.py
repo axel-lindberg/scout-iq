@@ -254,6 +254,10 @@ def test_team_analyze_by_player_ids():
     assert [s["id"] for s in a["squad"]] == a["lineup"]["starters"] + a["lineup"]["bench"]
     assert a["lineup"]["expected_points"] == 24.0 and a["squad_expected_points"] == [24.0, 24.0]
     assert [lu["gameweek"] for lu in a["lineups"]] == [11, 12] and a["lineups"][0] == a["lineup"]
+    # The default squad is already a best XI of all-2s: no squad does better, so it scores 100%.
+    assert [p["gameweek"] for p in a["perfect_teams"]] == [11, 12] and a["perfect_budget"] == 100.0
+    assert a["perfect_teams"][0]["expected_points"] >= a["lineup"]["expected_points"]
+    assert len(a["perfect_teams"][0]["player_ids"]) == 15 and a["perfect_teams"][0]["cost"] <= 100.0
     best = a["transfers"][0]
     assert [p["name"] for p in best["out"]] == ["WeakMid"] and [p["name"] for p in best["in"]] == ["GoodMid"]
     assert best["gain_per_gameweek"] == [8.0, 8.0] and best["net_gain"] == 16.0 and best["hits"] == 0
