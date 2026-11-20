@@ -98,6 +98,16 @@ export function teamAnalysis(overrides: Partial<TeamAnalysis> = {}): TeamAnalysi
     free_transfers: 2,
     squad: [...squad.filter((p) => p.in_xi), ...BENCH.flatMap((id) => squad.filter((p) => p.id === id))],
     lineup: { gameweek: 11, formation: "4-4-2", starters, bench: BENCH, captain: 30, vice_captain: 31, expected_points: 54.6 },
+    lineups: GWS.map((gw, k) => ({
+      gameweek: gw,
+      formation: "4-4-2",
+      starters,
+      bench: BENCH,
+      // Haaland blanks in GW 13: Isak captains instead.
+      captain: gw === 13 ? 31 : 30,
+      vice_captain: gw === 13 ? 21 : 31,
+      expected_points: [54.6, 53.1, 50.2, 54.0, 52.8][k] ?? 0,
+    })),
     squad_expected_points: [54.6, 53.1, 50.2, 54.0, 52.8],
     weakest: [
       { id: 24, name: "Rudoni", reason: "low expected points", expected_points_horizon_adjusted: 2 },
@@ -150,7 +160,7 @@ export function playerOptions(): PlayersResponse {
       team_code: TEAM_CODES[team] ?? null, // Coventry (COV) has none here: the plain shirt
       status: name === "Saka" ? "doubtful" : "available",
       availability: name === "Saka" ? ("doubtful" as const) : ("fit" as const),
-      expected_points: GWS.map(() => x),
+      expected_points: GWS.map((gw) => (gw === 13 && team === "MCI" ? 0 : x)),
       fixtures: GWS.map((gw) => (gw === 13 && team === "MCI" ? "" : "TOT (H)")),
       expected_points_horizon_adjusted: Math.round(x * 5 * 100) / 100,
     })),

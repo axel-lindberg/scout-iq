@@ -229,6 +229,32 @@ describe("my team page", () => {
       expect(points()).toBe("54.6");
     });
 
+    it("steps through the gameweeks with the arrows; Optimise uses the gameweek shown", async () => {
+      const { user } = await loaded();
+      const prev = screen.getByRole("button", { name: "Previous gameweek" });
+      const next = screen.getByRole("button", { name: "Next gameweek" });
+      expect(prev).toBeDisabled();
+
+      await user.click(next);
+      await user.click(next);
+      expect(screen.getByRole("figure", { name: "Your team for gameweek 13" })).toBeInTheDocument();
+      const haaland = screen.getByRole("listitem", { name: "Haaland, captain" });
+      expect(haaland).toHaveTextContent("blank");
+      expect(haaland).toHaveTextContent("0.0");
+      expect(points()).toBe("40.4"); // 54.6 without Haaland's 7.1 twice
+      expect(screen.getByText("best XI: 50.2 (+9.8)")).toBeInTheDocument();
+
+      await user.click(screen.getByRole("button", { name: "Optimise" }));
+      expect(screen.getByRole("listitem", { name: "Isak, captain" })).toBeInTheDocument();
+
+      await user.click(next);
+      await user.click(next);
+      expect(screen.getByRole("heading", { name: "Your team · GW15" })).toBeInTheDocument();
+      expect(next).toBeDisabled();
+      await user.click(prev);
+      expect(screen.getByRole("figure", { name: "Your team for gameweek 14" })).toBeInTheDocument();
+    });
+
     it("shows hits beyond the free transfers and blocks buys over budget", async () => {
       const { user } = await loaded();
       await user.click(screen.getByRole("button", { name: "Remove Rudoni" })); // 4.5 + 0.9 in the bank

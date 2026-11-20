@@ -74,6 +74,8 @@ function PlannerBody({ team, players, gameweeks, initial }: BodyProps) {
   const [selected, setSelected] = useState<SlotRef | null>(null);
   const [picking, setPicking] = useState<SlotRef | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  /** Which gameweek of the horizon the pitch shows (0 = the next one). */
+  const [gwIdx, setGwIdx] = useState(0);
 
   const byId = useMemo(() => new Map(players.map((p) => [p.id, p])), [players]);
   const playerOf = useCallback((id: number) => byId.get(id), [byId]);
@@ -89,8 +91,11 @@ function PlannerBody({ team, players, gameweeks, initial }: BodyProps) {
   const data = analysis.data;
   const current = complete && data !== undefined && !analysis.isPlaceholderData && !analysis.isFetching;
 
-  const points = lineupPoints(draft, (x) => byId.get(x)?.expected_points[0] ?? 0);
-  const optimum = current ? data.lineup.expected_points : null;
+  const points = lineupPoints(draft, (x) => byId.get(x)?.expected_points[gwIdx] ?? 0);
+  const best = current ? data.lineups[gwIdx] : undefined;
+  const optimum = best?.expected_points ?? null;
+  // Transfers are made before the next deadline, so a hit only counts in the first gameweek.
+  const hitsHere = gwIdx === 0 ? ts.hits : 0;
   const dirty = !sameDraft(draft, initial);
   const lineup = lineupOf(draft);
   const saveProblem = !complete
@@ -135,8 +140,8 @@ function PlannerBody({ team, players, gameweeks, initial }: BodyProps) {
 
   const selSlot = selected ? slotAt(draft, selected) : undefined;
   const selName = selSlot && selSlot.id !== null ? (byId.get(selSlot.id)?.name ?? "") : "";
-  const gw = gameweeks[0] ?? 0;
-  const net = points - ts.hits;
+  const gw = gameweeks[gwIdx] ?? 0;
+  const net = points - hitsHere;
   const horizonTotal = current ? data.squad_expected_points.reduce((a, b) => a + b, 0) - ts.hits : null;
   const pickerSlot = picking && slotAt(draft, picking)?.id === null ? picking : null;
 
@@ -145,10 +150,38 @@ function PlannerBody({ team, players, gameweeks, initial }: BodyProps) {
       <Card aria-labelledby="xi-h">
         <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h3 id="xi-h" className="heading text-lg">
-              Your team · GW{gw}
-            </h3>
-            <p className="text-xs text-muted">Make changes on the pitch; nothing is saved until you press Save.</p>
+            <div className="flex items-center gap-1" role="group" aria-label="Gameweek">
+              <button
+                type="button"
+                className="btn min-h-0 px-2 py-0.5"
+                aria-label="Previous gameweek"
+                disabled={gwIdx === 0}
+                onClick={() => {
+                  setGwIdx((i) => Math.max(0, i - 1));
+                }}
+              >
+                <span aria-hidden="true">‹</span>
+              </button>
+              <h3 id="xi-h" className="heading min-w-[9.5rem] text-center text-lg tabular-nums" aria-live="polite">
+                Your team · GW{gw}
+              </h3>
+              <button
+                type="button"
+                className="btn min-h-0 px-2 py-0.5"
+                aria-label="Next gameweek"
+                disabled={gwIdx >= gameweeks.length - 1}
+                onClick={() => {
+                  setGwIdx((i) => Math.min(gameweeks.length - 1, i + 1));
+                }}
+              >
+                <span aria-hidden="true">›</span>
+              </button>
+            </div>
+            <p className="text-xs text-muted">
+              {gwIdx === 0
+                ? "Make changes on the pitch; nothing is saved until you press Save."
+                : `${gwIdx + 1} gameweeks ahead: the same squad and lineup, less certain (form as of today).`}
+            </p>
           </div>
           <div className="text-right" aria-live="polite">
             <p className="text-xs font-medium text-muted">Predicted GW{gw} points</p>
@@ -159,7 +192,7 @@ function PlannerBody({ team, players, gameweeks, initial }: BodyProps) {
               {net.toFixed(1)}
             </p>
             <p className="text-xs text-muted tabular-nums">
-              {ts.hits > 0 ? `${points.toFixed(1)} − ${ts.hits} hit · ` : ""}
+              {hitsHere > 0 ? `${points.toFixed(1)} − ${hitsHere} hit · ` : ""}
               {optimum !== null
                 ? Math.abs(optimum - points) < 0.05
                   ? "best possible XI"
@@ -201,10 +234,10 @@ function PlannerBody({ team, players, gameweeks, initial }: BodyProps) {
             type="button"
             className="btn"
             disabled={!current}
-            title={current ? "Best XI, bench order and captain for these 15 players" : undefined}
+            title={current ? `Best XI, bench order and captain for these 15 players in GW${gw}` : undefined}
             onClick={() => {
-              if (!data) return;
-              edit(draftFromLineup(fromBackend(data.lineup), positionOf));
+              if (!best) return;
+              edit(draftFromLineup(fromBackend(best), positionOf));
               setSelected(null);
             }}
           >
@@ -340,6 +373,7 @@ function PlannerBody({ team, players, gameweeks, initial }: BodyProps) {
         <Pitch
           draft={draft}
           gameweek={gw}
+          gwIndex={gwIdx}
           playerOf={playerOf}
           selected={selected}
           swapHint={(r) => (selected ? cannotSwap(draft, selected, r) === null : null)}

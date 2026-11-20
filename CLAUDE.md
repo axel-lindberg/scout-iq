@@ -48,6 +48,7 @@ My team: FPL entry endpoints (`fpl_api.fetch_entry_team`) or 15 hand-picked ids 
 - `team.py`: deterministic squad feedback: rules check, best XI (try all 8 formations), captain,
   bench order, weakest players, exact single-transfer search, pairs (sum-of-singles estimate, then
   exact re-score). Objective: best XI + captain per GW, summed over the horizon, minus 4 per hit.
+  `analyze_squad` also returns the best XI for every GW (`lineups`, used by the pitch's GW arrows).
 - `news.py`: RAG over injury news (OpenAI embeddings, cosine similarity, cached index).
 - `tools.py`: the agent's tools and their JSON schemas (`horizon`, `rank_by`, `analyze_my_team`);
   strict name matching; `analyze_team()` shared by the API and the agent.
@@ -126,6 +127,8 @@ some experiments himself, so leave those as next steps instead of doing them.
 - Fixtures page (`/fixtures`): difficulty by Overall/Attack/Defense, sortable, team comparison.
 - My team page + `analyze_my_team` + transfer planner on the pitch (sell ×, buy +, subs, captain,
   Optimise/Save/Reset), all checked on Axel's real team (2026-11-17). Unsaved drafts aren't persisted.
+- Pitch GW arrows (‹ ›) step through the 5 predicted GWs: same squad and lineup, that GW's fixture,
+  xPts and best XI; Optimise uses the GW shown; hits count only in the first GW. One plan, not per GW.
 - Known limits: no selling prices (public API), free transfers estimated, the agent sometimes adds
   claims the tool didn't give (e.g. "reliable"): an agent eval would catch this.
 

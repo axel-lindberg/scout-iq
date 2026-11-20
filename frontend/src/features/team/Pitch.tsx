@@ -15,6 +15,8 @@ const FLAG_DOT = {
 interface Props {
   draft: Draft;
   gameweek: number;
+  /** Index of `gameweek` in each player's `fixtures` / `expected_points`. */
+  gwIndex: number;
   playerOf: (id: number) => PlayerOption | undefined;
   /** The player picked for a substitution or the armband. */
   selected: SlotRef | null;
@@ -49,7 +51,7 @@ function Empty({ slot, r, active, onAdd }: { slot: Slot; r: SlotRef; active: boo
 }
 
 function Chip(props: Props & { r: SlotRef; id: number; role: "C" | "V" | null; benchNo?: number }) {
-  const { r, id, role, benchNo, playerOf, selected, swapHint, onSelect, onRemove } = props;
+  const { r, id, role, benchNo, gwIndex, playerOf, selected, swapHint, onSelect, onRemove } = props;
   const p = playerOf(id);
   const name = p?.name ?? `#${id}`;
   const isSel = sameRef(selected, r);
@@ -77,9 +79,9 @@ function Chip(props: Props & { r: SlotRef; id: number; role: "C" | "V" | null; b
           <span className="truncate text-[11px] font-semibold sm:text-[12px]">{name}</span>
         </span>
         <span className="flex w-full flex-col items-center rounded-b-md bg-surface px-1 py-0.5 shadow-[0_1px_2px_rgb(0_0_0/0.2)] sm:flex-row sm:justify-between sm:gap-1">
-          <span className="max-w-full truncate text-[10px] text-muted sm:text-[11px]">{p?.fixtures[0] || "blank"}</span>
+          <span className="max-w-full truncate text-[10px] text-muted sm:text-[11px]">{p?.fixtures[gwIndex] || "blank"}</span>
           <span className="font-mono text-[12px] font-semibold tabular-nums sm:text-[13px]">
-            {(p?.expected_points[0] ?? 0).toFixed(1)}
+            {(p?.expected_points[gwIndex] ?? 0).toFixed(1)}
           </span>
         </span>
       </button>
@@ -106,7 +108,7 @@ function Chip(props: Props & { r: SlotRef; id: number; role: "C" | "V" | null; b
   );
 }
 
-/** Your XI for the next gameweek on a pitch, bench below. Click to select, × to sell, + to buy. */
+/** Your XI for one gameweek on a pitch, bench below. Click to select, × to sell, + to buy. */
 export function Pitch(props: Props) {
   const { draft, gameweek, picking, onAdd } = props;
   const slot = (s: Slot, r: SlotRef, role: "C" | "V" | null, benchNo?: number) =>
