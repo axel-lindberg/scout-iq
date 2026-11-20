@@ -139,8 +139,8 @@ some experiments himself, so leave those as next steps instead of doing them.
   best XI, else the previous GW's. Optimise changes the GW shown only. The analysis (best XI,
   suggestions) is for the shown GW's squad but still over all 5 GWs from the next one.
 - Pitch chips: dark name bar (`--chip` token); the fixture/xPts bar coloured by the player's xPts that
-  GW vs every player above 0.5 xPts (top 10% / 20% / 40% / 20% / bottom 10%; real cut-offs ~3.6,
-  2.7, 1.5, 0.8). A blank is bottom 10%.
+  GW vs every player above 0.5 xPts (top 5% / 15% / 50% / 20% / bottom 10%; real cut-offs ~3.9,
+  3.1, 1.5, 0.8; top 10% made too many squad players dark green). A blank is bottom 10%.
 - GW score strip: each GW's lineup points (minus the hit in GW1) as a % of that GW's perfect team;
   click a score to jump to that GW.
 - Known limits: no selling prices (public API), free transfers estimated, the agent sometimes adds

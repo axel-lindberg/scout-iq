@@ -233,14 +233,15 @@ describe("my team page", () => {
     it("colours each player's xPts bar by how it ranks against every player that gameweek", async () => {
       const { user } = await loaded();
       const bar = (name: RegExp) => screen.getByRole("listitem", { name }).querySelector("[data-fdr]");
-      // 23 players above 0.5 xPts: cut-offs 4.7 (top 10%), 4.2 (top 30%), 3.5, 1.0 (bottom 10%).
+      // 23 players above 0.5 xPts: cut-offs 4.9 (top 5%), 4.5 (top 20%), 3.5, 1.0 (bottom 10%).
       expect(bar(/^Haaland/)).toHaveClass("bg-fdr-1"); // 7.1
-      expect(bar(/^Palmer/)).toHaveClass("bg-fdr-1"); // 4.7
+      expect(bar(/^Isak/)).toHaveClass("bg-fdr-1"); // 4.9
+      expect(bar(/^Palmer/)).toHaveClass("bg-fdr-2"); // 4.7
       expect(bar(/^Saka/)).toHaveClass("bg-fdr-2"); // 4.5
       expect(bar(/^Raya/)).toHaveClass("bg-fdr-3"); // 3.9
       expect(bar(/^Konsa/)).toHaveClass("bg-fdr-4"); // 3.0
       expect(bar(/^Rudoni/)).toHaveClass("bg-fdr-5"); // 0.4
-      expect(within(screen.getByRole("listitem", { name: /^Haaland/ })).getByText(/Top 10% xPts/)).toBeInTheDocument();
+      expect(within(screen.getByRole("listitem", { name: /^Haaland/ })).getByText(/Top 5% xPts/)).toBeInTheDocument();
 
       await user.click(screen.getByRole("button", { name: "Next gameweek" }));
       await user.click(screen.getByRole("button", { name: "Next gameweek" }));

@@ -159,8 +159,8 @@ export function Pitch(props: Props) {
       <figcaption className="mt-2 text-xs text-muted">
         Click a player, then a bench player, to substitute; click a bench player then another to change the bench order.
         × sells a player, + buys one. C = captain (points ×2), V = vice-captain; the dot shows availability; the
-        bottom colour grades the xPts against every player that gameweek (dark green = top 10%, dark red = bottom
-        10%). Shirts:
+        bottom colour grades the xPts against every player that gameweek (dark green = top 5%, light green = top 20%,
+        dark red = bottom 10%). Shirts:
         official FPL images.
       </figcaption>
     </figure>
