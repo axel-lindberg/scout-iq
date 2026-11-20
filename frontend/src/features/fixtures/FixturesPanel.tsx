@@ -12,6 +12,7 @@ import {
   levelOf,
   MODES,
   readView,
+  LEVEL_FILL,
   scoreOf,
   sortTeams,
   writeView,
@@ -21,21 +22,13 @@ import {
 } from "../../lib/difficulty";
 import { TeamPicker } from "./TeamPicker";
 
-// Full class names, so Tailwind sees them.
-const FILL: Record<Level, string> = {
-  1: "bg-fdr-1 text-fdr-1-ink",
-  2: "bg-fdr-2 text-fdr-2-ink",
-  3: "bg-fdr-3 text-fdr-3-ink",
-  4: "bg-fdr-4 text-fdr-4-ink",
-  5: "bg-fdr-5 text-fdr-5-ink",
-};
 const LEVELS: Level[] = [1, 2, 3, 4, 5];
 
 function Fixture({ f, mode }: { f: RatedFixture; mode: Mode }) {
   return (
     <Tooltip
       content={describe(f, mode)}
-      className={`block w-full rounded px-1 py-1 text-center text-[12px] leading-tight font-semibold whitespace-nowrap sm:text-[13px] ${FILL[levelOf(scoreOf(f, mode))]}`}
+      className={`block w-full rounded px-1 py-1 text-center text-[12px] leading-tight font-semibold whitespace-nowrap sm:text-[13px] ${LEVEL_FILL[levelOf(scoreOf(f, mode))]}`}
     >
       {label(f)}
     </Tooltip>
@@ -159,7 +152,7 @@ export function FixturesPanel() {
         </div>
         <ul className="flex flex-wrap items-center gap-1 text-[11px]" aria-label="Colour key">
           {LEVELS.map((l) => (
-            <li key={l} className={`rounded px-1.5 py-0.5 font-semibold ${FILL[l]}`}>
+            <li key={l} className={`rounded px-1.5 py-0.5 font-semibold ${LEVEL_FILL[l]}`}>
               {LEVEL_NAME[l]}
             </li>
           ))}

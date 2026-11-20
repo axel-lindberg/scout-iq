@@ -1,6 +1,6 @@
 import { useCallback, useId, useMemo, useState } from "react";
 import type { LineupOut, PlayerOption, TeamAnalysis, Transfer } from "../../api/endpoints";
-import { usePlayers, useTeamAnalysis } from "../../api/queries";
+import { useFixtures, usePlayers, useTeamAnalysis } from "../../api/queries";
 import { Card } from "../../components/Card";
 import {
   applyTransfer,
@@ -25,6 +25,7 @@ import {
   squadIds,
   swap,
 } from "../../lib/plan";
+import { gameweekLevel } from "../../lib/difficulty";
 import { squadErrors } from "../../lib/squad";
 import { currentSquad, saveTeam, teamRequest, type SavedTeam } from "../../lib/teamStore";
 import { Pitch } from "./Pitch";
@@ -149,6 +150,12 @@ function PlannerBody({ team, players, gameweeks, initials, initialAdjust, gwIdx,
   const draft = drafts[gwIdx] ?? initials[0];
 
   const byId = useMemo(() => new Map(players.map((p) => [p.id, p])), [players]);
+  // Colour each chip by its club's fixture difficulty; the pitch works without it while loading.
+  const fixtures = useFixtures();
+  const teamByShort = useMemo(
+    () => new Map((fixtures.data?.teams ?? []).map((t) => [t.short_name, t])),
+    [fixtures.data],
+  );
   const playerOf = useCallback((id: number) => byId.get(id), [byId]);
   const teamOf = useCallback((id: number) => byId.get(id)?.team ?? "", [byId]);
   const priceOf = (id: number) => byId.get(id)?.price ?? 0;
@@ -552,6 +559,7 @@ function PlannerBody({ team, players, gameweeks, initials, initialAdjust, gwIdx,
           gameweek={gw}
           gwIndex={gwIdx}
           playerOf={playerOf}
+          levelOf={(id) => gameweekLevel(teamByShort.get(byId.get(id)?.team ?? ""), gw, "overall")}
           selected={selected}
           swapHint={(r) => (selected ? cannotSwap(draft, selected, r) === null : null)}
           picking={pickerSlot}

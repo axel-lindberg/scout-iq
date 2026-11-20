@@ -70,7 +70,8 @@ My team: FPL entry endpoints (`fpl_api.fetch_entry_team`) or 15 hand-picked ids 
   `teamStore.ts` (loaded squad + saved plan with a squad/lineup per GW in localStorage; the chat sends
   the first GW's planned squad),
   `squad.ts` (squad rules), `plan.ts` (pure draft logic: slots, swaps, armband, per-GW transfers),
-  `difficulty.ts` (5 colour steps (`--fdr-*` tokens), sorting, URL state).
+  `difficulty.ts` (5 colour steps (`--fdr-*` tokens, `LEVEL_FILL`), `gameweekLevel` (a double =
+  its average), sorting, URL state).
 - `test/`: fixtures, mocked fetch (`mockApi.ts`), `renderApp()`.
 
 ## Commands
@@ -137,6 +138,8 @@ some experiments himself, so leave those as next steps instead of doing them.
   for real selling prices, `plan.bankAdjust[gw]`, carried on). Defaults: saved lineup, else that GW's
   best XI, else the previous GW's. Optimise changes the GW shown only. The analysis (best XI,
   suggestions) is for the shown GW's squad but still over all 5 GWs from the next one.
+- Pitch chips: dark name bar (`--chip` token), the fixture/xPts bar coloured by the club's Overall
+  difficulty that GW (from `/api/fixtures`); blank or unknown = neutral.
 - GW score strip: each GW's lineup points (minus the hit in GW1) as a % of that GW's perfect team;
   click a score to jump to that GW.
 - Known limits: no selling prices (public API), free transfers estimated, the agent sometimes adds

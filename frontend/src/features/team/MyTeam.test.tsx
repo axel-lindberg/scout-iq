@@ -1,6 +1,7 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import { json, mockApi } from "../../test/mockApi";
 import { predictions, status } from "../../test/fixtures";
+import { fixtures as fixtureDifficulty } from "../../test/fixtureDifficulty";
 import { renderApp } from "../../test/render";
 import { playerOptions, SQUAD_IDS, teamAnalysis } from "../../test/teamFixtures";
 
@@ -228,6 +229,30 @@ describe("my team page", () => {
       expect(stat("Free transfers left")).toBe("2 of 2");
       expect(bank()).toHaveValue(0.9);
       expect(points()).toBe("54.6");
+    });
+
+    it("colours each player's fixture bar by difficulty, per gameweek", async () => {
+      mockApi({
+        ...base,
+        "GET /api/fixtures": fixtureDifficulty(),
+        "POST /api/team/analyze": teamAnalysis(),
+      });
+      const r = renderApp("/my-team");
+      await r.user.type(screen.getByLabelText("FPL team ID"), "1234567");
+      await r.user.click(screen.getByRole("button", { name: "Load team" }));
+      await screen.findByRole("figure", { name: "Your team for gameweek 11" });
+      const bar = (name: RegExp) => screen.getByRole("listitem", { name }).querySelector("[data-fdr]");
+      // GW11 overall: ARS 1.10 easy, CHE 1.00 medium, LIV 0.90 hard; MCI isn't in the data: no colour.
+      await waitFor(() => {
+        expect(bar(/^Raya/)).toHaveClass("bg-fdr-2");
+      });
+      expect(bar(/^Palmer/)).toHaveClass("bg-fdr-3");
+      expect(bar(/^Virgil/)).toHaveClass("bg-fdr-4");
+      expect(within(screen.getByRole("listitem", { name: /^Virgil/ })).getByText(/hard fixture/)).toBeInTheDocument();
+      expect(bar(/^Haaland/)).toBeNull();
+
+      await r.user.click(screen.getByRole("button", { name: "Next gameweek" }));
+      expect(bar(/^Virgil/)).toHaveClass("bg-fdr-3"); // a double: the average of 1.00 and 1.00
     });
 
     it("steps through the gameweeks with the arrows; Optimise uses the gameweek shown", async () => {

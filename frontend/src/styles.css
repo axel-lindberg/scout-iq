@@ -20,6 +20,9 @@
   --pitch: #2e8b4f;
   --pitch-stripe: #339656;
   --pitch-line: rgb(255 255 255 / 0.5);
+  /* Player name bar on the pitch: dark with white text in both themes. */
+  --chip: #15181d;
+  --chip-ink: #ffffff;
   /* Fixture difficulty, 1 = very easy ... 5 = very hard (darkest = most extreme); each fill has its
      own text colour (>= 4.5:1, except white on hard: 3.8:1, chosen by Axel). */
   --fdr-1: #1d7a47;
@@ -54,6 +57,8 @@
     --pitch: #1d5434;
     --pitch-stripe: #205b38;
     --pitch-line: rgb(255 255 255 / 0.22);
+    --chip: #0b0e11;
+    --chip-ink: #ffffff;
     /* As in light mode, the darkest shades are the extremes: deep green = very easy, deep red = very hard. */
     --fdr-1: #0f5a32;
     --fdr-1-ink: #e3f7ea;
@@ -85,6 +90,8 @@
   --color-bad: var(--bad);
   --color-bad-soft: var(--bad-soft);
   --color-pitch: var(--pitch);
+  --color-chip: var(--chip);
+  --color-chip-ink: var(--chip-ink);
   --color-fdr-1: var(--fdr-1);
   --color-fdr-1-ink: var(--fdr-1-ink);
   --color-fdr-2: var(--fdr-2);

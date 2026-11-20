@@ -2,6 +2,7 @@ import type { PlayerOption } from "../../api/endpoints";
 import { type Draft, type Slot, type SlotRef, sameRef } from "../../lib/plan";
 import { POSITION_ORDER } from "../../lib/squad";
 import { Shirt } from "../../components/Shirt";
+import { type Level, LEVEL_FILL, LEVEL_NAME } from "../../lib/difficulty";
 
 /** Five players must fit side by side on a phone. */
 const CHIP_W = "w-[62px] shrink-0 sm:w-[100px]";
@@ -18,6 +19,8 @@ interface Props {
   /** Index of `gameweek` in each player's `fixtures` / `expected_points`. */
   gwIndex: number;
   playerOf: (id: number) => PlayerOption | undefined;
+  /** Fixture difficulty of the player's club this gameweek: null = blank, undefined = not known (yet). */
+  levelOf: (id: number) => Level | null | undefined;
   /** The player picked for a substitution or the armband. */
   selected: SlotRef | null;
   /** For a selection: can this slot swap with it? (null = no hint) */
@@ -51,10 +54,12 @@ function Empty({ slot, r, active, onAdd }: { slot: Slot; r: SlotRef; active: boo
 }
 
 function Chip(props: Props & { r: SlotRef; id: number; role: "C" | "V" | null; benchNo?: number }) {
-  const { r, id, role, benchNo, gwIndex, playerOf, selected, swapHint, onSelect, onRemove } = props;
+  const { r, id, role, benchNo, gwIndex, playerOf, levelOf, selected, swapHint, onSelect, onRemove } = props;
   const p = playerOf(id);
   const name = p?.name ?? `#${id}`;
   const isSel = sameRef(selected, r);
+  const level = levelOf(id);
+  const fill = level ? LEVEL_FILL[level] : "bg-surface text-ink";
   const hint = selected && !isSel ? swapHint(r) : null;
   const label = `${name}${role === "C" ? ", captain" : role === "V" ? ", vice-captain" : ""}${benchNo ? `, bench ${benchNo}` : ""}`;
   return (
@@ -74,12 +79,19 @@ function Chip(props: Props & { r: SlotRef; id: number; role: "C" | "V" | null; b
           size={56}
           className="h-auto w-10 drop-shadow-[0_2px_2px_rgb(0_0_0/0.35)] sm:w-14"
         />
-        <span className="-mt-1 flex w-full items-center justify-center gap-1 rounded-t-md bg-ink px-1 py-0.5 text-surface">
+        <span className="-mt-1 flex w-full items-center justify-center gap-1 rounded-t-md bg-chip px-1 py-0.5 text-chip-ink">
           <span className={`size-1.5 shrink-0 rounded-full ${FLAG_DOT[p?.availability ?? "fit"]}`} aria-hidden="true" />
           <span className="truncate text-[11px] font-semibold sm:text-[12px]">{name}</span>
         </span>
-        <span className="flex w-full flex-col items-center rounded-b-md bg-surface px-1 py-0.5 shadow-[0_1px_2px_rgb(0_0_0/0.2)] sm:flex-row sm:justify-between sm:gap-1">
-          <span className="max-w-full truncate text-[10px] text-muted sm:text-[11px]">{p?.fixtures[gwIndex] || "blank"}</span>
+        <span
+          className={`flex w-full flex-col items-center rounded-b-md px-1 py-0.5 shadow-[0_1px_2px_rgb(0_0_0/0.2)] sm:flex-row sm:justify-between sm:gap-1 ${fill}`}
+          data-fdr={level ?? undefined}
+          title={level ? `${LEVEL_NAME[level]} fixture` : undefined}
+        >
+          <span className={`max-w-full truncate text-[10px] sm:text-[11px] ${level ? "font-medium" : "text-muted"}`}>
+            {p?.fixtures[gwIndex] || "blank"}
+            {level && <span className="sr-only">, {LEVEL_NAME[level].toLowerCase()} fixture</span>}
+          </span>
           <span className="font-mono text-[12px] font-semibold tabular-nums sm:text-[13px]">
             {(p?.expected_points[gwIndex] ?? 0).toFixed(1)}
           </span>
@@ -145,7 +157,8 @@ export function Pitch(props: Props) {
       </div>
       <figcaption className="mt-2 text-xs text-muted">
         Click a player, then a bench player, to substitute; click a bench player then another to change the bench order.
-        × sells a player, + buys one. C = captain (points ×2), V = vice-captain; the dot shows availability. Shirts:
+        × sells a player, + buys one. C = captain (points ×2), V = vice-captain; the dot shows availability; the
+        bottom colour is the fixture difficulty (Overall, as on the Fixtures page). Shirts:
         official FPL images.
       </figcaption>
     </figure>
