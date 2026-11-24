@@ -6,13 +6,22 @@ import { useSyncExternalStore } from "react";
 import type { EntryInfo, TeamContext, TeamRequest } from "../api/endpoints";
 import type { Lineup } from "./plan";
 
-/** Saved transfers and lineup on top of the original squad. Bank and free transfers are deltas. */
+/**
+ * Saved transfers and lineups on top of the original squad. `playerIds`, `lineup`, `transfers` and
+ * `bankDelta` describe the first gameweek planned (what the chat sends); `lineups` holds every gameweek.
+ */
 export interface SavedPlan {
   playerIds: number[];
+  /** The lineup for the first gameweek planned (what older saves had). */
   lineup: Lineup;
-  /** Transfers made (players bought that weren't in the original squad). */
+  /** Squad + lineup per gameweek (keys are gameweek numbers); each week can have its own transfers.
+   * Missing gameweeks carry the previous one on. */
+  lineups?: Record<string, Lineup>;
+  /** Your corrections to the bank per gameweek (£m, e.g. FPL's real selling prices). */
+  bankAdjust?: Record<string, number>;
+  /** Transfers made in the first gameweek (players bought that weren't in the original squad). */
   transfers: number;
-  /** £m from sales minus £m spent, at today's prices. */
+  /** £m in the bank after the first gameweek's transfers, minus the bank as loaded. */
   bankDelta: number;
 }
 
@@ -53,22 +62,50 @@ function write(key: string, value: string | null) {
 const isIds = (v: unknown, n: number): v is number[] =>
   Array.isArray(v) && v.length === n && v.every((x) => Number.isInteger(x));
 
+function isLineup(l: unknown, playerIds: readonly number[]): l is Lineup {
+  if (typeof l !== "object" || l === null) return false;
+  const x = l as Partial<Lineup>;
+  return (
+    isIds(x.starters, 11) &&
+    isIds(x.bench, 4) &&
+    new Set([...x.starters, ...x.bench]).size === 15 &&
+    [...x.starters, ...x.bench].every((id) => playerIds.includes(id)) &&
+    typeof x.captain === "number" &&
+    typeof x.vice === "number" &&
+    x.starters.includes(x.captain) &&
+    x.starters.includes(x.vice)
+  );
+}
+
 function isPlan(v: unknown): v is SavedPlan {
   if (typeof v !== "object" || v === null) return false;
   const p = v as Partial<SavedPlan>;
-  const l = p.lineup;
   return (
     isIds(p.playerIds, 15) &&
     typeof p.transfers === "number" &&
     typeof p.bankDelta === "number" &&
-    typeof l === "object" &&
-    isIds(l.starters, 11) &&
-    isIds(l.bench, 4) &&
-    new Set([...l.starters, ...l.bench]).size === 15 &&
-    [...l.starters, ...l.bench].every((x) => p.playerIds?.includes(x)) &&
-    l.starters.includes(l.captain) &&
-    l.starters.includes(l.vice)
+    isLineup(p.lineup, p.playerIds)
   );
+}
+
+/** Keep only well-formed per-gameweek lineups (each is its own 15) and numeric bank corrections. */
+function cleanLineups(p: SavedPlan): SavedPlan {
+  const raw: unknown = p.lineups;
+  const lineups =
+    typeof raw === "object" && raw !== null
+      ? Object.fromEntries(
+          Object.entries(raw).filter(([, l]) => {
+            const x = l as Partial<Lineup> | null;
+            return isLineup(l, [...(x?.starters ?? []), ...(x?.bench ?? [])]);
+          }),
+        )
+      : {};
+  const adj: unknown = p.bankAdjust;
+  const bankAdjust =
+    typeof adj === "object" && adj !== null
+      ? Object.fromEntries(Object.entries(adj).filter(([, v]) => typeof v === "number" && Number.isFinite(v)))
+      : {};
+  return { ...p, lineups, bankAdjust };
 }
 
 function isSavedTeam(v: unknown): v is SavedTeam {
@@ -82,7 +119,10 @@ function isSavedTeam(v: unknown): v is SavedTeam {
   );
 }
 
-let cache: { raw: string | null; value: SavedTeam | null } = { raw: null, value: null };
+let cache: { raw: string | null; value: SavedTeam | null } = {
+  raw: null,
+  value: null,
+};
 
 function snapshot(): SavedTeam | null {
   const raw = read(TEAM_KEY);
@@ -94,7 +134,7 @@ function snapshot(): SavedTeam | null {
         ? {
             ...parsed,
             entry: parsed.entry ?? null,
-            plan: isPlan(parsed.plan) ? parsed.plan : null,
+            plan: isPlan(parsed.plan) ? cleanLineups(parsed.plan) : null,
           }
         : null;
     } catch {

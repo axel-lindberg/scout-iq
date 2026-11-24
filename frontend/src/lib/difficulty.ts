@@ -35,6 +35,15 @@ export function levelOf(score: number): Level {
   return 5;
 }
 
+/** Fill + text colour per level. Full class names, so Tailwind sees them. */
+export const LEVEL_FILL: Record<Level, string> = {
+  1: "bg-fdr-1 text-fdr-1-ink",
+  2: "bg-fdr-2 text-fdr-2-ink",
+  3: "bg-fdr-3 text-fdr-3-ink",
+  4: "bg-fdr-4 text-fdr-4-ink",
+  5: "bg-fdr-5 text-fdr-5-ink",
+};
+
 export const scoreOf = (f: RatedFixture, mode: Mode): number => f[mode];
 
 /**

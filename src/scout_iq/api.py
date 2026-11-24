@@ -183,6 +183,15 @@ class LineupOut(BaseModel):
     expected_points: float = Field(description="XI total with the captain counted twice")
 
 
+class PerfectTeamOut(BaseModel):
+    gameweek: int
+    player_ids: list[int] = Field(description="The best possible 15 for this gameweek (GK, DEF, MID, FWD)")
+    starters: list[int]
+    captain: int
+    cost: float = Field(description="£m, at most `perfect_budget`")
+    expected_points: float = Field(description="XI + captain again: the 100% mark for a gameweek score")
+
+
 class WeakPlayer(BaseModel):
     id: int
     name: str
@@ -224,8 +233,11 @@ class TeamAnalysis(BaseModel):
     bank: float
     free_transfers: int
     squad: list[SquadPlayer] = Field(description="Starters (GK, DEF, MID, FWD) then the bench in order")
-    lineup: LineupOut
+    lineup: LineupOut = Field(description="Best XI for the next gameweek (= lineups[0])")
+    lineups: list[LineupOut] = Field(description="Best XI for each gameweek in the horizon")
     squad_expected_points: list[float] = Field(description="Best XI + captain, per gameweek")
+    perfect_budget: float = Field(description="£100m, or the squad's value + bank if that is more")
+    perfect_teams: list[PerfectTeamOut] = Field(description="Best possible squad under FPL rules, per gameweek")
     weakest: list[WeakPlayer]
     transfers: list[TransferOut]
     transfer_pairs: list[TransferOut]

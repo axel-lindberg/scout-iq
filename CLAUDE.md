@@ -48,6 +48,9 @@ My team: FPL entry endpoints (`fpl_api.fetch_entry_team`) or 15 hand-picked ids 
 - `team.py`: deterministic squad feedback: rules check, best XI (try all 8 formations), captain,
   bench order, weakest players, exact single-transfer search, pairs (sum-of-singles estimate, then
   exact re-score). Objective: best XI + captain per GW, summed over the horizon, minus 4 per hit.
+  `analyze_squad` also returns the best XI for every GW (`lineups`, used by the pitch's GW arrows).
+  `perfect_squad`: the best legal 15 of all players for one GW, an exact integer programme (scipy
+  `milp`/HiGHS, ~0.2 s, cached per GW and budget in `tools.py`); returned as `perfect_teams`.
 - `news.py`: RAG over injury news (OpenAI embeddings, cosine similarity, cached index).
 - `tools.py`: the agent's tools and their JSON schemas (`horizon`, `rank_by`, `analyze_my_team`);
   strict name matching; `analyze_team()` shared by the API and the agent.
@@ -64,9 +67,11 @@ My team: FPL entry endpoints (`fpl_api.fetch_entry_team`) or 15 hand-picked ids 
 - `features/`: `predictions/`, `compare/`, `chat/`, `fixtures/` (table + `TeamPicker`), `status/`, `team/`
   (load by ID, `SquadBuilder`, `Planner` = editable `Pitch` + `PlayerPicker`, `SquadTable`, `Transfers`).
 - `components/` (Card, Tooltip, AvailabilityBadge, `Shirt`), `lib/`: `shirts.ts` (the only shirt URL),
-  `teamStore.ts` (loaded squad + saved plan in localStorage; the chat sends the planned squad),
-  `squad.ts` (squad rules), `plan.ts` (pure draft logic: slots, swaps, armband, transfer count),
-  `difficulty.ts` (5 colour steps (`--fdr-*` tokens), sorting, URL state).
+  `teamStore.ts` (loaded squad + saved plan with a squad/lineup per GW in localStorage; the chat sends
+  the first GW's planned squad),
+  `squad.ts` (squad rules), `plan.ts` (pure draft logic: slots, swaps, armband, per-GW transfers),
+  `difficulty.ts` (5 colour steps (`--fdr-*` tokens, `LEVEL_FILL`), sorting, URL state),
+  `grade.ts` (xPts grade: percentile vs players in contention that GW, same 5 colours).
 - `test/`: fixtures, mocked fetch (`mockApi.ts`), `renderApp()`.
 
 ## Commands
@@ -126,6 +131,20 @@ some experiments himself, so leave those as next steps instead of doing them.
 - Fixtures page (`/fixtures`): difficulty by Overall/Attack/Defense, sortable, team comparison.
 - My team page + `analyze_my_team` + transfer planner on the pitch (sell ×, buy +, subs, captain,
   Optimise/Save/Reset), all checked on Axel's real team (2026-11-17). Unsaved drafts aren't persisted.
+- Pitch GW arrows (‹ ›) step through the 5 predicted GWs; each GW has its own squad, lineup and
+  armband (`plan.lineups[gw]`). A transfer in GW k carries into later GWs (`plan.carryForward`, which
+  keeps their own transfers), never earlier ones. `plan.planStates` rolls free transfers (left + 1,
+  max 5, 1 after a hit), hits and bank week to week. The Bank box is editable per GW (a correction
+  for real selling prices, `plan.bankAdjust[gw]`, carried on). Defaults: saved lineup, else that GW's
+  best XI, else the previous GW's. Optimise changes the GW shown only. The analysis (best XI,
+  suggestions) is for the shown GW's squad but still over all 5 GWs from the next one.
+- Pitch chips: dark name bar (`--chip` token); the fixture/xPts bar coloured by the player's xPts that
+  GW vs every player above 0.5 xPts (top 2% / 18% / 50% / 20% / bottom 10%; real cut-offs ~4.3,
+  3.1, 1.5, 0.8: dark green ~9 players a GW, by Axel's choice). A blank is bottom 10%.
+- Difficulty/grade colours (both themes, white text): #26462e, #427b50, medium unchanged, #8a4243,
+  #572b2a (Axel's palette, 2026-11-20).
+- GW score strip: each GW's lineup points (minus the hit in GW1) as a % of that GW's perfect team;
+  click a score to jump to that GW.
 - Known limits: no selling prices (public API), free transfers estimated, the agent sometimes adds
   claims the tool didn't give (e.g. "reliable"): an agent eval would catch this.
 
@@ -137,6 +156,7 @@ some experiments himself, so leave those as next steps instead of doing them.
 
 - Confidence intervals for model vs baselines (gameweek bootstrap) and several random seeds; an
   agent evaluation set (questions with expected tools and facts), traced in LangSmith.
+- Transfer suggestions from a later GW's point of view (analysis with a start gameweek in `team.py`).
 - Bench value / auto-subs in the team objective (bench points count 0 now), and a "roll the
   transfer" option valued explicitly.
 - Link players across seasons so early-season predictions improve.
@@ -161,3 +181,8 @@ some experiments himself, so leave those as next steps instead of doing them.
   or the model's `opp_*_last5` (noisy, ~3% of gain). Half-life 12 matches + shrinkage 5 tuned on
   2024-25 (next-match xG MSE 0.653 vs 0.704 for last-3 unshrunk); FPL `strength_overall` only before
   any match. Runs are summed, not averaged: a double counts twice and a blank adds 0.
+- 2026-11-20: GW score = your points / the perfect team's (best 15 of all players, FPL rules, per GW),
+  not / your own best XI, so it also reflects transfers. Budget = max(£100m, squad value + bank) so a
+  squad that rose in value can't pass 100% just by costing more. Solved exactly (MILP), not greedily.
+- 2026-11-20: Transfers per gameweek, counted against the week before, with FPL's roll-over (left + 1,
+  max 5). Bank corrections are typed per GW instead of modelling selling prices (not in the public API).

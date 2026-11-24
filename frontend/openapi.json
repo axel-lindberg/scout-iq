@@ -602,6 +602,53 @@
         "title": "ModelCard",
         "type": "object"
       },
+      "PerfectTeamOut": {
+        "properties": {
+          "captain": {
+            "title": "Captain",
+            "type": "integer"
+          },
+          "cost": {
+            "description": "\u00a3m, at most `perfect_budget`",
+            "title": "Cost",
+            "type": "number"
+          },
+          "expected_points": {
+            "description": "XI + captain again: the 100% mark for a gameweek score",
+            "title": "Expected Points",
+            "type": "number"
+          },
+          "gameweek": {
+            "title": "Gameweek",
+            "type": "integer"
+          },
+          "player_ids": {
+            "description": "The best possible 15 for this gameweek (GK, DEF, MID, FWD)",
+            "items": {
+              "type": "integer"
+            },
+            "title": "Player Ids",
+            "type": "array"
+          },
+          "starters": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Starters",
+            "type": "array"
+          }
+        },
+        "required": [
+          "gameweek",
+          "player_ids",
+          "starters",
+          "captain",
+          "cost",
+          "expected_points"
+        ],
+        "title": "PerfectTeamOut",
+        "type": "object"
+      },
       "Player": {
         "properties": {
           "chance_of_playing": {
@@ -1306,7 +1353,29 @@
             "type": "array"
           },
           "lineup": {
-            "$ref": "#/components/schemas/LineupOut"
+            "$ref": "#/components/schemas/LineupOut",
+            "description": "Best XI for the next gameweek (= lineups[0])"
+          },
+          "lineups": {
+            "description": "Best XI for each gameweek in the horizon",
+            "items": {
+              "$ref": "#/components/schemas/LineupOut"
+            },
+            "title": "Lineups",
+            "type": "array"
+          },
+          "perfect_budget": {
+            "description": "\u00a3100m, or the squad's value + bank if that is more",
+            "title": "Perfect Budget",
+            "type": "number"
+          },
+          "perfect_teams": {
+            "description": "Best possible squad under FPL rules, per gameweek",
+            "items": {
+              "$ref": "#/components/schemas/PerfectTeamOut"
+            },
+            "title": "Perfect Teams",
+            "type": "array"
           },
           "player_ids": {
             "items": {
@@ -1376,7 +1445,10 @@
           "free_transfers",
           "squad",
           "lineup",
+          "lineups",
           "squad_expected_points",
+          "perfect_budget",
+          "perfect_teams",
           "weakest",
           "transfers",
           "transfer_pairs",

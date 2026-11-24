@@ -97,6 +97,8 @@ def test_double_and_blank_gameweeks_in_the_xi():
     pool, ids = _pool(squad=rows)
     a = team.analyze_squad(pool, ids, bank=0.0, free_transfers=1)
     assert 30 not in a["lineup"].starters                             # blank -> benched in GW 11
+    assert 30 in a["lineups"][1].starters and a["lineups"][1].captain == 30   # double -> starts, captain
+    assert [lu.points for lu in a["lineups"]] == pytest.approx(a["squad_points_per_gw"])
     assert a["squad_points_per_gw"][0] == pytest.approx(24.0)
     assert a["squad_points_per_gw"][1] == pytest.approx(2 + 9 * 2 + 9 + 9)   # starts and captains in GW 12
     fwd0 = next(p for p in a["players"] if p["element"] == 30)
@@ -187,3 +189,59 @@ def test_analysis_flags_weak_and_unavailable_players_and_is_deterministic():
     b = team.analyze_squad(pool, ids, bank=0.0, free_transfers=1)
     assert [c["in"] for c in a["singles"]] == [c["in"] for c in b["singles"]]
     assert a["lineup"] == b["lineup"]
+
+
+# ---- perfect squad -------------------------------------------------------------------------
+
+def _random_pool(seed):
+    """3 GK, 6 DEF, 6 MID, 4 FWD from 5 clubs: few enough squads (432) to check by brute force."""
+    rng = np.random.default_rng(seed)
+    shape = {"GK": 3, "DEF": 6, "MID": 6, "FWD": 4}
+    rows, e = [], 1
+    for pos, k in shape.items():
+        for _ in range(k):
+            rows.append((e, f"P{e}", pos, int(rng.integers(1, 6)), float(rng.choice([4.0, 5.5, 7.0, 9.0, 12.0])),
+                         [float(np.round(rng.uniform(0, 8), 1))]))
+            e += 1
+    players, by_gw, _ = universe(squad=rows)
+    by_gw = by_gw[by_gw.GW == GAMEWEEKS[0]]
+    return team.build_pool(players, by_gw, GAMEWEEKS[:1])
+
+
+def _brute_force(pool, budget):
+    info, x = pool.info, pool.xpts[:, 0]
+    groups = {p: [e for e in info.index if info.at[e, "position"] == p] for p in team.SQUAD_SHAPE}
+    best = None
+    for combo in itertools.product(*(itertools.combinations(groups[p], k) for p, k in team.SQUAD_SHAPE.items())):
+        squad = [e for g in combo for e in g]
+        if info.loc[squad, "price"].sum() > budget + 1e-9 or info.loc[squad, "team_id"].value_counts().max() > 3:
+            continue
+        pts = team.squad_points(x[pool.rows(squad)][:, None], info.loc[squad, "position"].to_numpy())[0]
+        best = pts if best is None else max(best, pts)
+    return best
+
+
+@pytest.mark.parametrize("seed", range(6))
+@pytest.mark.parametrize("budget", [90.0, 105.0])
+def test_perfect_squad_matches_brute_force(seed, budget):
+    pool = _random_pool(seed)
+    want = _brute_force(pool, budget)
+    if want is None:
+        with pytest.raises(ValueError):
+            team.perfect_squad(pool, 0, budget=budget)
+        return
+    p = team.perfect_squad(pool, 0, budget=budget)
+    assert p.points == pytest.approx(want)
+    assert team.validate_squad(pool.info, p.squad) == [] and p.cost <= budget + 1e-9
+    assert len(p.starters) == 11 and set(p.starters) <= set(p.squad) and p.captain in p.starters
+    best = team.best_xi(p.squad, pool.info.loc[p.squad, "position"].tolist(), pool.xpts[pool.rows(p.squad), 0].tolist())
+    assert best.points == pytest.approx(p.points)    # its XI is the best XI of its own 15
+
+
+def test_perfect_squad_respects_the_budget():
+    # A 20-point forward costing £60m doesn't fit with 14 others at £4m+ under £100m... unless they're cheap.
+    star = (99, "Star", "FWD", 20, 60.0, [20, 20])
+    pool, ids = _pool(extra=[star])                 # the default squad costs £83m, Fwd costs £6m
+    p = team.perfect_squad(pool, 0)
+    assert 99 not in p.squad and p.points == pytest.approx(24.0)
+    assert 99 in team.perfect_squad(pool, 0, budget=200.0).squad
