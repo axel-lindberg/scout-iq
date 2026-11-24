@@ -17,9 +17,9 @@
   --warn-soft: #fbf0de;
   --bad: #b3261e;
   --bad-soft: #fbe7e5;
-  /* Muted green (Axel's choice) so the player chips stand out; the stripe is a shade lighter. */
-  --pitch: #6a907b;
-  --pitch-stripe: #719884;
+  /* Muted greens so the player chips stand out (Axel's choice): light stripe, then the dark one. */
+  --pitch: #5c8270;
+  --pitch-stripe: #658a76;
   --pitch-line: rgb(255 255 255 / 0.5);
   /* Player name bar on the pitch: dark with white text in both themes. */
   --chip: #15181d;
@@ -56,8 +56,8 @@
     --warn-soft: #33281a;
     --bad: #ef7d75;
     --bad-soft: #3a1f1e;
-    --pitch: #6a907b;
-    --pitch-stripe: #719884;
+    --pitch: #5c8270;
+    --pitch-stripe: #658a76;
     --pitch-line: rgb(255 255 255 / 0.4);
     --chip: #0b0e11;
     --chip-ink: #ffffff;
