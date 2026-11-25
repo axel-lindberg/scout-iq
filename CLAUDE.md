@@ -19,7 +19,7 @@ model without ownership; source `results/day2_scores.csv`, `results/day2_picks.c
 | LightGBM | 1.877 | 2.746 | 6.97 | 4.75 | 0.450 |
 | season average to date (best baseline) | 1.994 | 2.895 | 6.22 | 4.53 | 0.376 |
 
-5.8% lower MAE than the best baseline. Hyperparameters were tuned on 2024-25 only.
+5.9% lower MAE than the best baseline. Hyperparameters were tuned on 2024-25 only.
 
 ## Architecture
 
